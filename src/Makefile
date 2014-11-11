@@ -1,6 +1,9 @@
 CC=gcc
 IDIR =../include
-CFLAGS=-I $(IDIR)
+CFLAGS=-I $(IDIR) 
+CFLAGS += -std=c99 -Wall -Wextra -Werror \
+	-Wstrict-prototypes -Wmissing-prototypes \
+	-Wshadow -Wfloat-equal
 
 ODIR =../obj
 LDIR =../lib
