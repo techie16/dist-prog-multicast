@@ -14,12 +14,13 @@
 #include <errno.h>
 #include <signal.h>
 #include <stdlib.h>
+#include <string.h>
 #include "client_server.h"
 
 client_db_st *head = NULL, *current = NULL;
 
-void cleanExit(){
-    printf("Program exiting\n");
+void cleanExit(int signum){
+    printf("Program exiting with signum: %d\n", signum);
     exit(0);
 }
 
@@ -56,15 +57,11 @@ void get_msg_type_str (msg_type_en msg_type, char *str)
     str[MAX_MSG_STR_LEN] = '\0';
 }
 
-void initialize_struct_addr (struct sockaddr_in *addr, int port_num) {
+void initialize_addr_struct (struct sockaddr_in *addr, int port_num) {
 
     addr->sin_family = ADDR_FAMILY;
     addr->sin_addr.s_addr = htonl(INADDR_ANY);
     addr->sin_port = htons(port_num);
-}
-
-bool search_entry (struct in_addr client_addr, int port_num) {
-
 }
 
 void add_entry_to_db (struct in_addr client_addr, int port_num, int grp) {
@@ -72,7 +69,7 @@ void add_entry_to_db (struct in_addr client_addr, int port_num, int grp) {
 	client_db_st *entry = NULL;
 	entry = (client_db_st *) malloc(sizeof(client_db_st));
 
-	printf("Sidd: entry to add.. size to alloc: %d\n", sizeof(client_db_st));	
+	printf("Sidd: entry to add.. size to alloc: %zd\n", sizeof(client_db_st));	
 	if (!entry) {
 		fprintf(stderr, "malloc failure, while creating entry \n");
 	}

@@ -13,26 +13,27 @@
 #include <netdb.h>
 #include <errno.h>
 #include <signal.h>
+#include <stdlib.h>
+#include <unistd.h>
 #include "client_server.h"
 
 int main(int argc, char **argv) 
 {
 
-    int cport_fd, dport_fd, cport_broad_fd, client_socket[MAX_CLIENT], dummy_sock;
+    int cport_fd, cport_broad_fd, dummy_sock;
     int cport = 0, broadport = 0, dport = 0;
 	FILE *file_fd;
     struct sockaddr_in serv_addr;
     struct sockaddr_in broadcast_addr; // connector's address information
-    struct sockaddr_in client_addr[MAX_CLIENT], dummy_addr;    // connected clients address information
+    struct sockaddr_in dummy_addr;    // connected clients address information
     struct hostent *host = NULL;
-    int broadcast = 1, reuse = 1;
+    int broadcast = 1;
     bool use_gbroadcast = FALSE;
     int rc = 0;
     int numbytes = 0, addr_len;
     char addr_str[35];
     char msg_str[MAX_MSG_STR_LEN];
     struct in_addr addr_binary;
-	struct client_db_st *entry = NULL;
 	char file_str[MAX_FILE_LEN];
 
     /* set prog behaviour on recieving below Signals */
@@ -92,7 +93,7 @@ int main(int argc, char **argv)
 
     /* Control msgs will be recvd from clients via this UDP based socket */
     cport_fd = socket(ADDR_FAMILY, SOCK_DGRAM, 0);
-    initialize_struct_addr(&serv_addr, cport);
+    initialize_addr_struct(&serv_addr, cport);
 
     /* associate the socket with the port number */ 
     rc = bind(cport_fd, (struct sockaddr*)&serv_addr, sizeof(serv_addr));

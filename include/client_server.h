@@ -33,7 +33,7 @@ typedef struct client_db {
 void get_msg_type_str (msg_type_en msg_type, char *str);
 
 /* Function to perform cleanup, when a program terminates */
-void cleanExit();
+void cleanExit(int);
 
 /* Initialize any structure address */
 void initialize_addr_struct (struct sockaddr_in *addr, int port_num);
@@ -42,4 +42,4 @@ void initialize_addr_struct (struct sockaddr_in *addr, int port_num);
 void add_entry_to_db (struct in_addr client_addr, int port_num, int grp);
 
 /* count total num of entries present in client_db */
-int count_total ();
+int count_total (void);

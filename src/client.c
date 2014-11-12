@@ -19,18 +19,16 @@
 
 int main(int argc, char *argv[])
 {
-    int listen_fd, sender_fd, itr = 0; 
-	int broadcast_socket, addrlen, comm_socket, tcp_comm_socket;
+	int broadcast_socket;
     int broad_port = 0, comm_port = 0;
-    int reuse = 1;
+    int reuse = 1, comm_socket = 0;
 	int max_sd, activity;
     struct sockaddr_in my_addr; // my address information
     struct sockaddr_in server_addr; // connectors address information
     int addr_len, numbytes;
     char buf[MAX_MSG_STR_LEN];
-    char addr_str[35];
     fd_set readfds, writefds; //set of socket descriptors
-	bool reg_done = FALSE, is_server_up = FALSE;
+	bool reg_done = FALSE; //is_server_up = FALSE;
 
     /* set prog behaviour on recieving below Signals */
     signal(SIGTERM, cleanExit);
@@ -158,8 +156,8 @@ int main(int argc, char *argv[])
 			/* reset server Port */
 			server_addr.sin_port = htons(comm_port);
 			addr_len = sizeof(server_addr);
-			if (numbytes = sendto(comm_socket, buf, strlen(buf), 0,
-						(struct sockaddr *)&server_addr, addr_len) == -1) {
+			if ((numbytes = sendto(comm_socket, buf, strlen(buf), 0,
+						(struct sockaddr *)&server_addr, addr_len)) == -1) {
 				fprintf(stderr, "Registration request failed. errno: %s", strerror(errno));
 				exit(1);
 			}
@@ -192,8 +190,8 @@ int main(int argc, char *argv[])
 			if (!reg_done) {
 				get_msg_type_str(REGISTER_CLIENT, buf);
 				addr_len = sizeof(server_addr);
-				if (numbytes = sendto(comm_socket, buf, strlen(buf), 0,
-							(struct sockaddr *)&server_addr, addr_len) == -1) {
+				if ((numbytes = sendto(comm_socket, buf, strlen(buf), 0,
+							(struct sockaddr *)&server_addr, addr_len)) == -1) {
 					fprintf(stderr, "Explicit Registration request failed. errno: %s", strerror(errno));
 					exit(1);
 				}
