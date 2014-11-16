@@ -15,196 +15,252 @@
 #include <arpa/inet.h>
 #include <signal.h>
 #include <sys/time.h>
+#include <getopt.h>
 #include "client_server.h"
 
 int main(int argc, char *argv[])
 {
-	int broadcast_socket;
-    int broad_port = 0, comm_port = 0;
-    int reuse = 1, comm_socket = 0;
-	int max_sd, activity;
-    struct sockaddr_in my_addr; // my address information
+	
+	msg_st *msg = NULL;
+	msg_st msg_dummy;
+	int option = 0, port_num = 0, comm_port = 0;
     struct sockaddr_in server_addr; // connectors address information
-    int addr_len, numbytes;
-    char buf[MAX_MSG_STR_LEN];
-    fd_set readfds, writefds; //set of socket descriptors
-	bool reg_done = FALSE; //is_server_up = FALSE;
+    struct sockaddr_in my_addr; // my address information
+	char addr_str[20];
+	int broadcast_socket = 0, comm_socket = 0;
+    int reuse = 1;
+	int port_addr_counter = 0 ;
+	bool use_def_addr = TRUE;
+	bool is_server_up = TRUE;
+    int addr_len = 0, numbytes = 0;
+	int rc = 0;	
+	int group_id = 0;
 
+	rc = rc;
     /* set prog behaviour on recieving below Signals */
     signal(SIGTERM, cleanExit);
     signal(SIGINT, cleanExit);
 
-    if (argc != 3) {
-        fprintf(stderr, "%s: usage %s <Broadcast port> <Server IP> \n", argv[0], argv[0]);
-        exit(1);
-    }
+	/* initialize structures */
+	memset(&msg_dummy, 0, sizeof(msg_st));
+	memset(&server_addr, 0, sizeof(server_addr));
+	memset(&my_addr, 0, sizeof(my_addr));
 
-    /* fetch broadcast port from cmd line args */
-    if (sscanf(argv[1], "%d", &broad_port) <= 0) {
-        fprintf(stderr, "%s: error parsing Port. exiting\n", argv[0]);
-        exit(1);
-    }
-    comm_port = broad_port + 1;
-   
-	if ((comm_socket = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
-		fprintf(stderr, "communication socket creation failed. errno: %s\n", 
-															strerror(errno));
-		exit(1);
+	while ((option = getopt(argc, argv, "hda:p:g:")) != -1) {
+
+		switch(option) {
+			default: 
+				fprintf(stderr, "   Wrong arguments specified..Plz rerun with correct args\n");
+				disp_client_help_msg();
+				goto err_exit;
+				break;
+
+			case 'h': 
+				/* help for usage */
+				disp_client_help_msg();
+				goto err_exit;
+				break;
+
+			case 'd':
+				/* enable debugging */
+				fprintf(stdout, "   debugging enabled\n");
+				debug_on = TRUE;
+				break;
+
+			case 'p':
+				/* override default port number specified in conf.txt*/
+				port_num = atoi(optarg);
+				port_addr_counter++;
+				fprintf(stdout, "   Port number %d will be used for communication\n", port_num);
+				break;
+
+			case 'a':
+				/* fetch server address */
+				DEBUG("%s %s", "server address to be used is:", optarg);
+				port_addr_counter++;
+				#if 0
+				server_addr.sin_addr.s_addr = inet_addr(optarg);
+				if (server_addr.sin_addr.s_addr == (in_addr_t)(-1)) {
+					ERROR("%s %s", "converting IPaddress into in_addr. errno:", 
+														strerror(errno));
+					use_def_addr = TRUE;
+				} else {
+					use_def_addr = FALSE;
+				}
+				#endif
+				if ( (inet_pton(ADDR_FAMILY, optarg, 
+									&(server_addr.sin_addr))) == 0) {
+					ERROR("Server address %s %s", optarg, 
+							"coudnt be converted using inet_pton");	
+					use_def_addr = TRUE;
+				} else {
+					use_def_addr = FALSE;
+				}
+				break;
+
+			case 'g':
+				DEBUG("%s %s", "Client will request for group:", optarg);
+				group_id = atoi(optarg);
+				break;
+		}
 	}
 
-	#if 0
-	if ((tcp_comm_socket = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
-		fprintf(stderr, "TCP communication socket creation failed. errno: %s\n",
-															strerror(errno));
-		exit(1);
+	if (port_addr_counter == 1) {
+		ERROR("%s", "server prog is missing either port or addr argument..!");
+		EXIT;
 	}
-	#endif
 
-	/* fetch server IP address from argv */
+	if ( (argc == 1) || use_def_addr) {
+		
+		PRINT("%s", "None args passed, using default values");
+		if (get_server_info_frm_file(addr_str, &port_num) == -1) {
+			ERROR("%s: %s", __FUNCTION__, "get_server_info_frm_file failed");
+			EXIT;
+		} else {
+			if ((inet_pton(ADDR_FAMILY, addr_str,
+										 &(server_addr.sin_addr))) == 0) {
+				ERROR("Server address %s %s", addr_str,
+						"coudnt be converted using inet_pton");
+			} else {
+				DEBUG("default address: %s and port: %d will be used", 
+														addr_str, port_num);
+			}
+		}
+	}
+
+	comm_port = port_num+1;
+
+	comm_socket = socket(AF_INET, SOCK_STREAM, 0);
+	if (RC_NOTOK(comm_socket)) {
+		ERROR("%s %s", "TCP communication socket creation failed. errno:",
+															strerror(errno));
+		goto err_exit;
+	}
+
 	server_addr.sin_family = ADDR_FAMILY; 
-	server_addr.sin_addr.s_addr = inet_addr(argv[2]);
 	server_addr.sin_port = htons(comm_port);
 	memset(&server_addr.sin_zero, 0, 8); //zero the rest of the struct
 
-	#if 0
-	setsockopt(tcp_comm_socket, SOL_SOCKET, SO_REUSEADDR,
-               &reuse, sizeof(reuse));
+	setsockopt(comm_socket, SOL_SOCKET, SO_REUSEADDR,
+			               &reuse, sizeof(reuse));
 
-	//check if server is up and available
-	if(connect(tcp_comm_socket, (struct sockaddr*)&server_addr, sizeof(struct sockaddr)) == -1) {
-		fprintf(stdout, "SERVER is not UP, moving client to listening state. err: %s\n", strerror(errno));
+	//check if server is up and available now
+	addr_len = sizeof(struct sockaddr);
+	if(connect(comm_socket, (struct sockaddr*)&server_addr, 
+							addr_len) == -1) {
+		PRINT("%s %s", 
+			 "SERVER is not UP, moving client to listening state. err:",
+	         strerror(errno));
+		is_server_up = FALSE;
 	} else {
 		is_server_up = TRUE;
 	}
 
-	/* purpose is done, close the tcp socket for now */
-	close(tcp_comm_socket);
-	#endif
+	if (!is_server_up) {
+		broadcast_socket = socket(ADDR_FAMILY, SOCK_DGRAM, 0);
+	    if (RC_NOTOK(broadcast_socket)) {
+			ERROR("%s %s", "socket creation failed. errno:", strerror(errno));
+			goto err_exit;
+    	}
+  
+		/* 
+		 * get rid of "address already in use" error message by 
+    	 * setting the socket option to REUSE 
+		 */
+    	setsockopt(broadcast_socket, SOL_SOCKET, SO_REUSEADDR,
+        	       &reuse, sizeof(reuse));
 
-    if ((broadcast_socket = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
-        fprintf(stderr, "socket creation failed. errno: %d\n", errno);
-        exit(1);
-    }
+	    my_addr.sin_family = ADDR_FAMILY; // host byte order
+    	my_addr.sin_port = htons(port_num);
+	    my_addr.sin_addr.s_addr = htonl(INADDR_ANY); // automatically fill with my IP
+    	memset(&(my_addr.sin_zero), 0, 8); // zero the rest of the struct
+
+    	if (bind(broadcast_socket, (struct sockaddr *)&my_addr,
+					            sizeof(struct sockaddr)) == -1) {
+			ERROR("%s %s", "error while binding to broadcast socket. errno:",
+															strerror(errno));
+    		goto err_exit;
+    	}
+
+	    addr_len = sizeof(struct sockaddr);
+    	PRINT("%s %d", "listening for any broadcast msg from server on port:",
+			 														port_num);
+		msg = calloc(1, sizeof(msg_st));
+		if (!msg) {
+			ERROR("%s", "couln't alloc memory to msg");
+			goto err_exit;
+		}
+		numbytes = recvfrom(broadcast_socket, msg, MAX_BROADCAST_PKT_LEN,
+							0, (struct sockaddr *)&server_addr,
+							(socklen_t *)&addr_len);
+    	if (RC_NOTOK(numbytes)) {
+			ERROR("%s %s", "Broadcast msg recv failure. errno:", 
+												strerror(errno));
+        	goto err_exit;
+		}
+
+    	PRINT("Recieved %s and msg_len: %d from: %s",
+										get_msg_type_str(msg->type),
+										msg->len,
+										inet_ntoa(server_addr.sin_addr));
+		if (broadcast_socket) {
+			/* we are done, lets close it down */
+			close(broadcast_socket);
+			broadcast_socket = 0;
+		}
+		
+		/* Sleep for 2 seconds, so that server shall b ready for listening */
+		sleep(2);
+		
+		/* reset connecting port of server_addr */
+		server_addr.sin_port = htons(comm_port);
+		addr_len = sizeof(struct sockaddr);
+		if(connect(comm_socket, (struct sockaddr*)&server_addr, 
+											addr_len) == -1) {
+			ERROR("%s%s", 
+			 		"Unable to connect to Server, exiting..! errno.: ",
+	         		strerror(errno));
+			EXIT;
+		} else {
+			DEBUG("%s", "Connection to server is successfull");
+		}
+	}
 
     my_addr.sin_family = ADDR_FAMILY; // host byte order
-    my_addr.sin_port = htons(broad_port); 
+    my_addr.sin_port = htons(comm_port); 
     my_addr.sin_addr.s_addr = htonl(INADDR_ANY); // automatically fill with my IP
     memset(&(my_addr.sin_zero), 0, 8); // zero the rest of the struct
 
-	/* 
-	 * get rid of "address already in use" error message by 
-     * setting the socket option to REUSE 
-	 */
-    setsockopt(broadcast_socket, SOL_SOCKET, SO_REUSEADDR,
-               &reuse, sizeof(reuse));
-	setsockopt(comm_socket, SOL_SOCKET, SO_REUSEADDR,
-               &reuse, sizeof(reuse));
+	msg = calloc(1, sizeof(msg_st));
+	msg->type = REGISTER_CLIENT;
+	msg->len = 0;
+	msg->group_id = group_id;
+	msg->hash_id = 0;
+	client_state = CLIENT_INIT;
 
-    if (bind(broadcast_socket, (struct sockaddr *)&my_addr,
-            sizeof(struct sockaddr)) == -1) {
-        fprintf(stderr, "error while binding to broadcast socket. errno: %d\n", errno);
-        exit(1);
-    }
-
-	#if 0
-    if (bind(comm_socket, (struct sockaddr *)&server_addr,
-            sizeof(struct sockaddr)) == -1) {
-        fprintf(stderr, "error while binding to communication socket. errno: %s\n", 	
-																	  strerror(errno));
-        exit(1);
-    }
-	#endif
-
-    addr_len = sizeof(struct sockaddr);
-    printf("listening for any broadcast msg from server on port: %d\n", broad_port);
-
-	while (TRUE) {
-
-        //clear the socket set
-        FD_ZERO(&readfds);
-        FD_ZERO(&writefds);
-
-        //add broadcast_socket and comm_socket to FD set
-        FD_SET(broadcast_socket, &readfds);
-        FD_SET(comm_socket, &readfds);
-        FD_SET(comm_socket, &writefds);
-        max_sd = broadcast_socket;
-
-		/* wait indefinitely, hence no timeout is specified */
-		activity = select(max_sd+1 , &readfds , &writefds , NULL , NULL);
-		if ((activity < 0) && (errno!=EINTR)) {
-            printf("select failed. errno: %d", errno);
-        }
-
-        //If something happened on the braodcast socket , then its an SERVER_UP req
-        if (FD_ISSET(broadcast_socket, &readfds)) {
-			printf("Sidd: brodcast FD set\n");
-			addr_len = sizeof(server_addr);
-		    if ((numbytes = recvfrom(broadcast_socket, buf, MAX_MSG_STR_LEN-1, 0,
-    		                (struct sockaddr *)&server_addr, &addr_len)) == -1) {
-				fprintf(stderr, "braodcast msg recv failure. errno: %s\n", strerror(errno));
-        		exit(1);
-	    	}
-
-		    buf[numbytes] = '\0';
-	    	//inet_ntop(AF_INET, &server_addr.sin_addr, addr_str, 35);
-	    	fprintf(stdout, "Recieved %s from: %s\n", buf,
-											inet_ntoa(server_addr.sin_addr));
-
-			/* Now send Registartion request to server */
-			get_msg_type_str(REGISTER_CLIENT, buf);
-			/* reset server Port */
-			server_addr.sin_port = htons(comm_port);
-			addr_len = sizeof(server_addr);
-			if ((numbytes = sendto(comm_socket, buf, strlen(buf), 0,
-						(struct sockaddr *)&server_addr, addr_len)) == -1) {
-				fprintf(stderr, "Registration request failed. errno: %s", strerror(errno));
-				exit(1);
-			}
-			
-			fprintf(stdout, "Registration request sent to Server\n");
-		} else if (FD_ISSET(comm_socket, &readfds)) {
-			/* 
-        	 * If something happened on the comm_socket, 
-			 * then its an Registration Ack from server
-			 */
-			printf("Sidd: Comm socket FD is set \n");
-			memset(&server_addr, 0, sizeof(server_addr));
-			addr_len = sizeof(server_addr);
-		    if ((numbytes = recvfrom(comm_socket, buf, MAX_MSG_STR_LEN-1, 0,
-			                (struct sockaddr *)&server_addr, &addr_len)) == -1) {
-				fprintf(stderr, "Registration Ack recv failure. errno: %s\n", strerror(errno));
-    			exit(1);
-    		}
-
-	    	buf[numbytes] = '\0';
-			reg_done = TRUE;
-	    	//inet_ntop(AF_INET, &server_addr.sin_addr, addr_str, 35);
-	    	fprintf(stdout, "Recieved %s through: %s\n", buf, 
-											inet_ntoa(server_addr.sin_addr));
-		} else if (FD_ISSET(comm_socket, &writefds)) {
-
-			/* Now send Registartion request to server 
-			 * No need to send registration req if its already done
-			 */
-			if (!reg_done) {
-				get_msg_type_str(REGISTER_CLIENT, buf);
-				addr_len = sizeof(server_addr);
-				if ((numbytes = sendto(comm_socket, buf, strlen(buf), 0,
-							(struct sockaddr *)&server_addr, addr_len)) == -1) {
-					fprintf(stderr, "Explicit Registration request failed. errno: %s", strerror(errno));
-					exit(1);
-				}
-				fprintf(stdout, "Explicit Registration request sent to Server\n");
-			}
-			sleep(10);
-		}
+	rc = action_on_client_state(comm_socket, msg, client_state, &server_addr, 
+								TRUE); 
+	if (RC_NOTOK(rc)) {
+		ERROR("%s %s", "action_on_client_state() failed for", 
+							get_client_state_str(client_state));
 	}
 
     /* recieving is done, close the broadcast listener socket */
 	/* This is never going to happen, until someone kills the program */
-	
-    close(broadcast_socket);
-	close(comm_socket);
+	if (broadcast_socket) {
+		close(broadcast_socket);
+	} 
+	if (comm_socket) {
+		close(comm_socket);
+	}
     return 0;
+
+	err_exit:
+		if (broadcast_socket) {
+			close(broadcast_socket);
+		} 
+		if (comm_socket) {
+			close(comm_socket);
+		}
+		return 0;
 }
