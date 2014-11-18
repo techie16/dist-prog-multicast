@@ -11,6 +11,7 @@
 #define SERVERPORT 3690
 #define ERR_CODE (-1)
 #define RC_NOTOK(rc) (rc == ERR_CODE)
+#define CHK_ALLOC(msg) if(!msg) { return ERR_CODE; }
 #define FALSE 0
 #define TRUE  1
 #define MAX_MSG_STR_LEN 20
@@ -25,6 +26,7 @@
 #define ERROR(format, ...) print_error(format, __VA_ARGS__)
 #define EXIT exit(0)
 #define FUNC __FUNCTION__
+#define HBT_TIME 180
 
 extern int debug_on;
 
@@ -40,6 +42,7 @@ typedef enum {
     SERVER_UP,
     REGISTER_CLIENT,
     ACK_FRM_SERVER,
+	HEARTBEAT,
     CLIENT_DOWN,
     MAX_MSG_TYPE
 } msg_type_en;
@@ -61,8 +64,9 @@ typedef enum {
 	SERVER_REG_WAIT,
 	SERVER_REG_RECV,
 	SERVER_ACK_SENT,
-	SERVER_EXIT_WAIT,
+	SERVER_HBEAT_WAIT,
 	SERVER_EXIT_RECV,
+	SERVER_CLIENT_DOWN,
 	SERVER_MAX_STATE
 } server_state_en;
 
@@ -81,11 +85,25 @@ typedef struct msg_st_ {
 	char data[0];
 } msg_st;
 
+typedef struct thread_arg_st_ {
+	int socket_id;
+	server_state_en state_arg;
+	struct sockaddr_in addr;
+} thread_arg_st;
+
+void * 
+process_via_thread (void *arg);
+
+int get_msg_data_len (int socket_id);
+
+bool get_send_flag_for_state (bool flag);
+
 /* Function to convert mst tyoe to string */
 char * get_msg_type_str (msg_type_en msg_type);
 
 /* Function to perform cleanup, when a program terminates */
 void cleanExit(int);
+void cleanExit_client(int signum);
 
 /* Initialize any structure address */
 void initialize_addr_struct (struct sockaddr_in *addr, int port_num);
@@ -105,17 +123,24 @@ void disp_server_help_msg(void);
 
 extern client_state_en client_state;
 extern server_state_en server_state;
+extern struct sockaddr_in server_addr_copy;
+extern int comm_port_copy;
+extern int comm_sock_copy;
+extern int group_id_copy;
+extern int hash_id_copy;
 
 char * get_client_state_str(client_state_en client_state);
 
 char * get_server_state_str(server_state_en server_state_arg);
 
-int action_on_client_state(int socket_fd, msg_st *recv_msg,
-						   client_state_en client_state,	 
-		                   struct sockaddr_in *addr, bool send_on);
+int action_on_server_state(int socket_fd, 
+						   server_state_en server_state_arg,
+                  		   struct sockaddr_in *addr);
 
-int action_on_server_state(int socket_fd, msg_st *recv_msg,
-						   server_state_en server_state_arg,	 
-		                   struct sockaddr_in *addr, bool send_on);
+int action_on_client_state(int socket_fd, 
+						   client_state_en client_state_arg,	 
+		                   struct sockaddr_in *addr);
+
+void set_signal_handler(void (*f)(int));
 
 #endif

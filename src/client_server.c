@@ -16,6 +16,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <arpa/inet.h>
+#include <unistd.h>
 #include "client_server.h"
 
 client_db_st *head = NULL, *current = NULL;
@@ -23,10 +24,19 @@ int debug_on = FALSE;
 client_state_en client_state = CLIENT_RES;
 server_state_en server_state = SERVER_RES;
 
+struct sockaddr_in server_addr_copy;
+int comm_port_copy = 0;
+int comm_sock_copy = 0;
+int group_id_copy = 0;
+int hash_id_copy = 0;
 
-void cleanExit(int signum){
-    printf("Program exiting with signum: %d\n", signum);
-    exit(0);
+void set_signal_handler(void (*f)(int)) {
+
+    signal(SIGTERM, *f);
+    signal(SIGINT, *f);
+    signal(SIGABRT, *f);
+    signal(SIGFPE, *f);
+    signal(SIGSEGV, *f);
 }
 
 char * get_msg_type_str (msg_type_en msg_type) 
@@ -44,6 +54,9 @@ char * get_msg_type_str (msg_type_en msg_type)
 
         case ACK_FRM_SERVER:
 			return "ACK_FRM_SERVER";    
+
+        case HEARTBEAT:
+			return "HEARTBEAT";    
 
         case CLIENT_DOWN:
 			return "CLIENT_DOWN";
@@ -103,11 +116,14 @@ char * get_server_state_str(server_state_en server_state_arg)
 		case SERVER_ACK_SENT:
 			return "SERVER_ACK_SENT";
 
-		case SERVER_EXIT_WAIT:
-			return "SERVER_EXIT_WAIT";
+		case SERVER_HBEAT_WAIT:
+			return "SERVER_HBEAT_WAIT";
 
 		case SERVER_EXIT_RECV:
 			return "SERVER_EXIT_RECV";
+
+		case SERVER_CLIENT_DOWN:
+			return "SERVER_CLIENT_DOWN";
 
 		default:
 			return "SERVER_UNKNOWN_STATE";
@@ -195,7 +211,7 @@ void print_debug(const char* format, ... )
 void print_error(const char* format, ... ) 
 {
     va_list args;
-	fprintf(stderr, "***ERROR: ");
+	fprintf(stderr, "###ERROR: ");
     va_start(args, format);
     vfprintf(stderr, format, args );
     va_end(args);
@@ -301,24 +317,17 @@ int get_server_port_frm_file (void)
 	return port_num;
 }
 
-int action_on_client_state(int socket_fd, msg_st *recv_msg,
+int action_on_client_state(int socket_fd, 
 						   client_state_en client_state_arg,	 
-		                   struct sockaddr_in *addr, bool send_on)
+		                   struct sockaddr_in *addr)
 {
 	int rc = 0;
 	int numbytes = 0;
 	msg_st *msg = NULL;
 	msg_st dummy_msg;
+	int msg_data_len = 0;
 		
 	memset(&dummy_msg, 0, sizeof(msg_st));
-
-	if (send_on) {
-		/* for send case, recv_msg shudnt be null */
-		if (!recv_msg) {
-			ERROR("%s %s", FUNC, "recv_msg is NULL");
-			return ERR_CODE;
-		}
-	}
 
 	/* chk if socket_fd is valid ? */
 	if (!socket_fd) {
@@ -330,90 +339,121 @@ int action_on_client_state(int socket_fd, msg_st *recv_msg,
 
 		case CLIENT_INIT:
 			/* CLient now shud send a registration req to server */
-			numbytes = send(socket_fd, recv_msg, sizeof(recv_msg), 0);
+			msg = calloc(1, sizeof(msg_st));
+			msg->type = REGISTER_CLIENT;
+			msg->len = 0;
+			msg->group_id = 1;
+			msg->hash_id = 0;
+	
+			numbytes = send(socket_fd, msg, sizeof(msg), 0);
 			if (RC_NOTOK(numbytes)) {
-				ERROR("%s %s", "Registration msg cudn't be send to server. errno: ", strerror(errno));
+				ERROR("%s %s", 
+					  "Registration msg cudn't be send to server. errno: ", 
+					   strerror(errno));
 				return ERR_CODE;
 			} else {
-				PRINT("%s %s for group_id: %d", 
+				DEBUG("%s %s for group_id: %d", 
 						"Registartion msg sent to server: ", 
-						inet_ntoa(addr->sin_addr), recv_msg->group_id);
+						inet_ntoa(addr->sin_addr), msg->group_id);
 				client_state = CLIENT_REG_SENT;
-				rc = action_on_client_state(socket_fd, msg, client_state, 
-										   addr, FALSE);
-				if (RC_NOTOK(rc)) {
-					ERROR("%s: %s %s", __FUNCTION__, "failed for state: ",
-							get_client_state_str(client_state));
-					return ERR_CODE;
-				} else {
-					DEBUG("%s %s", "Action requested for client_state", 
-								get_client_state_str(client_state));
-				}
-				free_msg(recv_msg);
+				free_msg(msg);
 			}
 			break;
 
 		case CLIENT_REG_SENT:
 		case CLIENT_ACK_WAIT:
-			DEBUG("%s: for state: %s", __FUNCTION__, 
-				 get_client_state_str(client_state));
-			numbytes = recv(socket_fd, &dummy_msg,
-							MAX_BROADCAST_PKT_LEN, MSG_PEEK);
-			if (RC_NOTOK(numbytes)) {
-                ERROR("%s: %s %s", __FUNCTION__, 
-							"dummy_msg recv() failed. errno. ", 
-							 strerror(errno));
+			/* client will wait for any ack msg from server */
+			msg_data_len = get_msg_data_len(socket_fd);
+			if (RC_NOTOK(msg_data_len)) {
 				return ERR_CODE;
-            } else {
-                msg = calloc(1, sizeof(msg_st)+dummy_msg.len);
+			} else {
+				DEBUG("%s %d length", "ACK_FRM_SERVER data part is of", 
+														msg_data_len);
+                msg = calloc(1, sizeof(msg_st)+msg_data_len);
+				CHK_ALLOC(msg);
                 numbytes = recv(socket_fd, msg,
-                                sizeof(msg_st)+dummy_msg.len, 0);
+                                sizeof(msg_st)+msg_data_len, 0);
                 if (RC_NOTOK(numbytes)) {
-                    ERROR("%s %s %s", __FUNCTION__, 
-									"recv() failed. errno. ", strerror(errno));
+                    ERROR("%s %s", "ACK_FRM_SERVER recv() failed. errno.", 
+							       strerror(errno));
 					return ERR_CODE;
                 } else {
+					PRINT("%s %s", get_msg_type_str(msg->type),
+									  "recieved from server");
 					client_state = CLIENT_ACK_OK;
-                    PRINT("%s %s %s", get_msg_type_str(msg->type), 
-									  "recieved from server:",
-                                            inet_ntoa(addr->sin_addr));
 					free_msg(msg);
 				}
 			}
 			break;
 
 		case CLIENT_ACK_OK:
-
+			/* 
+			 * Client will send periodic hearbeats to server to inform 
+			 * server that its still alive 
+			 */
+			sleep(HBT_TIME);
+			msg = calloc(1, sizeof(msg_st));
+			CHK_ALLOC(msg);
+			
+			msg->type = HEARTBEAT;
+			msg->len = 0;
+			msg->group_id = 1;
+			msg->hash_id = 1;
+	
+			numbytes = send(socket_fd, msg, sizeof(msg), 0);
+			if (RC_NOTOK(numbytes)) {
+				ERROR("%s %s", 
+					  "HEARTBEAT msg cudn't be send to server. errno: ", 
+					   strerror(errno));
+				return ERR_CODE;
+			} else {
+				DEBUG("%s %s for group_id: %d", 
+						"HEARTBEAT msg sent to server: ", 
+						inet_ntoa(addr->sin_addr), msg->group_id);
+				client_state = CLIENT_ACK_OK;
+				free_msg(msg);
+			}
 			break;
 
 		case CLIENT_EXIT:
+			/* Client is Exiting, send Down signal to server */
+			msg = calloc(1, sizeof(msg_st));
+			msg->type = CLIENT_DOWN;
+			msg->len = 0;
+			msg->group_id = 1;
+			msg->hash_id = 1;
+	
+			numbytes = send(socket_fd, msg, sizeof(msg), 0);
+			if (RC_NOTOK(numbytes)) {
+				ERROR("%s %s", 
+					  "CLIENT_DOWN msg cudn't be send to server. errno: ", 
+					   strerror(errno));
+				return ERR_CODE;
+			} else {
+				DEBUG("%s %s for group_id: %d", 
+						"CLIENT_DOWN msg sent to server: ", 
+						inet_ntoa(addr->sin_addr), msg->group_id);
+				client_state = CLIENT_EXIT;
+				free_msg(msg);
+			}
 			break;
 
 		default:
+			DEBUG("%s: %s", FUNC, "In default");
 			break;
 	}
 	return rc;
 }
 
-int action_on_server_state(int socket_fd, msg_st *recv_msg,
-						   server_state_en server_state_arg,	 
-		                   struct sockaddr_in *addr, bool send_on)
+int action_on_server_state(int socket_fd, 
+						   server_state_en server_state_arg,
+                  		   struct sockaddr_in *addr)
 {
 	int rc = 0;
 	int numbytes = 0;
 	msg_st *msg = NULL;
-	msg_st dummy_msg;
+	int msg_data_len = 0;
 		
-	memset(&dummy_msg, 0, sizeof(msg_st));
-
-	if (send_on) {
-		/* for send case, recv_msg shudnt be null */
-		if (!recv_msg) {
-			ERROR("%s %s", FUNC, "recv_msg is NULL");
-			return ERR_CODE;
-		}
-	}
-
 	/* chk if socket_fd is valid ? */
 	if (!socket_fd) {
 		ERROR("%s %s", FUNC, "socket_fd is not valid");
@@ -427,88 +467,167 @@ int action_on_server_state(int socket_fd, msg_st *recv_msg,
 			break;
 		
 		case SERVER_BROADCAST_SENT:
+			break;
+
+		case SERVER_REG_WAIT:
 			DEBUG("%s called for state: %s", FUNC, 
 				 get_server_state_str(server_state));
-			numbytes = recv(socket_fd, &dummy_msg,
-							MAX_BROADCAST_PKT_LEN, MSG_PEEK);
-			if (RC_NOTOK(numbytes)) {
-                ERROR("%s: %s %s", FUNC, 
-							"dummy_msg recv() failed. errno. ", 
-							 strerror(errno));
+			msg_data_len = get_msg_data_len(socket_fd);
+			if (RC_NOTOK(msg_data_len)) {
 				return ERR_CODE;
-
             } else {
 				DEBUG("%s %d length", "Registration request DATA part is of", 
-														dummy_msg.len);
-                msg = calloc(1, sizeof(msg_st)+dummy_msg.len);
+														msg_data_len);
+                msg = calloc(1, sizeof(msg_st)+msg_data_len);
+				CHK_ALLOC(msg);
                 numbytes = recv(socket_fd, msg,
-                                sizeof(msg_st)+dummy_msg.len, 0);
+                                sizeof(msg_st)+msg_data_len, 0);
                 if (RC_NOTOK(numbytes)) {
-                    ERROR("%s %s %s", FUNC, 
-									"recv() failed. errno. ", strerror(errno));
+                    ERROR("%s %s", "Registration recv() failed. errno.", 
+							       strerror(errno));
 					return ERR_CODE;
                 } else {
-
                     PRINT("%s %s %s", get_msg_type_str(msg->type), 
 									  "recieved from client:",
                                             inet_ntoa(addr->sin_addr));
 					server_state = SERVER_REG_RECV;
-					free_msg(msg);
+					/* Sidd: Place holder for saving client entry */
+				}
+				free_msg(msg);
+			}
+			break;
 
-					/* Now prepaper a server_ack msg */
-					msg = calloc(1, sizeof(msg_st));
-					msg->type = ACK_FRM_SERVER;
-					msg->group_id = 1;
-					msg->hash_id = 1;
-		
-					PRINT("%s%s", "Now sending ACK_FRM_SERVER to client: ", 
-												inet_ntoa(addr->sin_addr));
-					rc = action_on_server_state(socket_fd, msg, 
-											server_state, addr, TRUE);
-					if (RC_NOTOK(rc)) {
-						ERROR("%s: %s", FUNC, 
-							 "failed for state: SERVER_REG_RECV");
-						return ERR_CODE;
+		case SERVER_REG_RECV:
+
+			/* Now prepare a server_ack msg */
+			msg = calloc(1, sizeof(msg_st));
+			msg->type = ACK_FRM_SERVER;
+			msg->group_id = 1;
+			msg->hash_id = 1; /* Sidd: update as per logic */
+
+			PRINT("%s%s", "Now sending ACK_FRM_SERVER to client: ", 
+										inet_ntoa(addr->sin_addr));
+
+			numbytes = send(socket_fd, msg, sizeof(msg), 0);
+			if (RC_NOTOK(numbytes)) {
+				ERROR("%s %s", 
+					"ACK_FRM_SERVER msg cudn't be send to client. errno: ", 
+					strerror(errno));
+				return ERR_CODE; /* Sidd: use GOTO to free msg */
+			} else {
+				PRINT("%s %s for group_id: %d", 
+						"ACK_FRM_SERVER msg sent to client: ", 
+						inet_ntoa(addr->sin_addr), msg->group_id);
+				server_state = SERVER_ACK_SENT;
+				free_msg(msg);
+			}
+			fprintf(stdout, "\n*********************************************\n");
+			break;
+
+		case SERVER_ACK_SENT:
+		case SERVER_HBEAT_WAIT:
+			DEBUG("%s", "Server waiting for Heartbeat/Exit msg from client");
+			msg_data_len = get_msg_data_len(socket_fd);
+			if (RC_NOTOK(msg_data_len)) {
+				return ERR_CODE;
+			} else {
+				msg = calloc(1, sizeof(msg_st)+msg_data_len);
+				CHK_ALLOC(msg);
+	            numbytes = recv(socket_fd, msg,
+                                sizeof(msg_st)+msg_data_len, 0);
+                if (RC_NOTOK(numbytes)) {
+                    ERROR("%s %s", "HEARTBEAT/EXIT recv() failed. errno.", 
+							       strerror(errno));
+					return ERR_CODE;
+                } else {
+					if (msg->type == HEARTBEAT) {
+	                    DEBUG("%s %s %s", get_msg_type_str(msg->type), 
+										  "recieved from client:",
+        	                              inet_ntoa(addr->sin_addr));
+						free_msg(msg);
+						server_state = SERVER_HBEAT_WAIT;
 					} else {
-						DEBUG("%s %s", FUNC, 
-							"call success for state SERVER_REG_RECV");
-						fprintf(stdout, 
-							"\n*******************************************\n");
+						server_state = SERVER_EXIT_RECV;
 					}
 				}
 			}
 			break;
 
-		case SERVER_REG_WAIT:
-		case SERVER_REG_RECV:
-			numbytes = send(socket_fd, recv_msg, sizeof(recv_msg), 0);
-			if (RC_NOTOK(numbytes)) {
-				ERROR("%s %s", 
-					"ACK_FRM_SERVER msg cudn't be send to client. errno: ", 
-					strerror(errno));
-				return ERR_CODE;
-			} else {
-				PRINT("%s %s for group_id: %d", 
-						"ACK_FRM_SERVER msg sent to client: ", 
-						inet_ntoa(addr->sin_addr), recv_msg->group_id);
-				server_state = SERVER_ACK_SENT;
-				free_msg(recv_msg);
-			}
-			break;
-
-		case SERVER_ACK_SENT:
-			break;
-		
-		case SERVER_EXIT_WAIT:
-			break;
-
 		case SERVER_EXIT_RECV:
+			PRINT("Client: %s is DOWN, marking client as INACTIVE in db", 
+												inet_ntoa(addr->sin_addr));
+			server_state = SERVER_CLIENT_DOWN;
 			break;
 
 		default:
+			ERROR("%s", "In default, no such state");
 			break;
 	}
 	return rc;
+}
+
+void cleanExit(int signum){
+    printf("Program exiting with signum: %d\n", signum);
+    exit(0);
+}
+
+void cleanExit_client(int signum){
+	
+	int rc = 0;
+
+    PRINT("Recieved EXIT(signum: %d) %s", signum, "signal, Informing Server");
+
+	rc = action_on_client_state(comm_sock_copy, CLIENT_EXIT, 
+								&server_addr_copy);
+	if (RC_NOTOK(rc)) {
+		ERROR("%s", "SERVER couldn't be informed about client exit");	
+	}
+	sleep(5);
+    exit(0);
+}
+
+void * process_via_thread (void *arg) 
+{
+
+	int rc = 0;
+	thread_arg_st *thread_arg = (thread_arg_st *)arg;
+	
+	if (!thread_arg) {
+		ERROR("%s: %s", FUNC, "args passed is NULL, cant proceed");
+		return NULL;
+	}
+
+	while (server_state != SERVER_CLIENT_DOWN) {	
+
+		thread_arg->state_arg = server_state;
+		rc = action_on_server_state(thread_arg->socket_id, 
+									thread_arg->state_arg, 
+									&(thread_arg->addr));
+		if (RC_NOTOK(rc)) {
+			ERROR("%s: %s", FUNC,
+					"failed for state SERVER_BROADCAST_SENT");
+			server_state = SERVER_HBEAT_WAIT;
+			continue;
+		}
+	}
+	return NULL;
+}
+
+int get_msg_data_len (int socket_id)
+{
+	int rc = 0;
+	msg_st dummy_msg;
+
+	memset(&dummy_msg, 0 , sizeof(&dummy_msg));
+	rc = recv(socket_id, &dummy_msg, 
+			 MAX_BROADCAST_PKT_LEN, MSG_PEEK);
+	if (RC_NOTOK(rc)) {
+		ERROR("%s: %s %s", FUNC, "dummy_msg recv() failed. errno. ",
+							strerror(errno));
+		return rc;
+	}	
+
+	return dummy_msg.len;
 }
 
 void disp_client_help_msg(void) {

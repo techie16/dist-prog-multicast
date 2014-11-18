@@ -38,9 +38,7 @@ int main(int argc, char *argv[])
 
 	rc = rc;
     /* set prog behaviour on recieving below Signals */
-    signal(SIGTERM, cleanExit);
-    signal(SIGINT, cleanExit);
-
+	
 	/* initialize structures */
 	memset(&msg_dummy, 0, sizeof(msg_st));
 	memset(&server_addr, 0, sizeof(server_addr));
@@ -129,6 +127,9 @@ int main(int argc, char *argv[])
 	}
 
 	comm_port = port_num+1;
+	server_addr.sin_family = ADDR_FAMILY; 
+	server_addr.sin_port = htons(comm_port);
+	memset(&server_addr.sin_zero, 0, 8); //zero the rest of the struct
 
 	comm_socket = socket(AF_INET, SOCK_STREAM, 0);
 	if (RC_NOTOK(comm_socket)) {
@@ -136,10 +137,6 @@ int main(int argc, char *argv[])
 															strerror(errno));
 		goto err_exit;
 	}
-
-	server_addr.sin_family = ADDR_FAMILY; 
-	server_addr.sin_port = htons(comm_port);
-	memset(&server_addr.sin_zero, 0, 8); //zero the rest of the struct
 
 	setsockopt(comm_socket, SOL_SOCKET, SO_REUSEADDR,
 			               &reuse, sizeof(reuse));
@@ -226,23 +223,36 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	/* 
+	 * Now copy server address and comm_port to global copy vars.
+	 * These will be used to send EXIT signals to server for 
+	 * cleanup
+  	 */
+	//server_addr.sin_port = htons(comm_port);
+	memset(&server_addr_copy, 0, sizeof(server_addr_copy));
+	memcpy(&server_addr_copy, &server_addr, sizeof(server_addr_copy));
+	comm_port_copy = comm_port;
+	comm_sock_copy = comm_socket;
+	group_id_copy = group_id;
+
+	/* Register signal events */
+	set_signal_handler(cleanExit_client);
+
+	#if 0
     my_addr.sin_family = ADDR_FAMILY; // host byte order
     my_addr.sin_port = htons(comm_port); 
     my_addr.sin_addr.s_addr = htonl(INADDR_ANY); // automatically fill with my IP
     memset(&(my_addr.sin_zero), 0, 8); // zero the rest of the struct
-
-	msg = calloc(1, sizeof(msg_st));
-	msg->type = REGISTER_CLIENT;
-	msg->len = 0;
-	msg->group_id = group_id;
-	msg->hash_id = 0;
+	#endif
+	
 	client_state = CLIENT_INIT;
-
-	rc = action_on_client_state(comm_socket, msg, client_state, &server_addr, 
-								TRUE); 
-	if (RC_NOTOK(rc)) {
-		ERROR("%s %s", "action_on_client_state() failed for", 
-							get_client_state_str(client_state));
+	
+	while (client_state != CLIENT_EXIT) {
+		rc = action_on_client_state(comm_socket, client_state, &server_addr); 
+		if (RC_NOTOK(rc)) {
+			ERROR("%s %s", "action_on_client_state() failed for", 
+								get_client_state_str(client_state));
+		}
 	}
 
     /* recieving is done, close the broadcast listener socket */

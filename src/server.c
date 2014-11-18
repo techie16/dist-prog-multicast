@@ -16,6 +16,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <getopt.h>
+#include <pthread.h>
 #include "client_server.h"
 
 int main(int argc, char **argv) 
@@ -33,15 +34,15 @@ int main(int argc, char **argv)
 	int addr_len = 0;
     //char msg_str[MAX_MSG_STR_LEN];
 	int rc = 0;
+	thread_arg_st thread_arg;
+	pthread_t thread_id[MAX_CLIENTS];
+	pthread_attr_t attr;
+	int i = 0;
 
     int broadcast = 1;
     int numbytes = 0;
 
 	rc = rc;
-
-    /* set prog behaviour on recieving below Signals */
-    signal(SIGTERM, cleanExit);
-    signal(SIGINT, cleanExit);
 
 	memset(&client_addr, 0, sizeof(client_addr));
 	memset(&broadcast_addr, 0, sizeof(broadcast_addr));
@@ -100,6 +101,9 @@ int main(int argc, char **argv)
 
 	comm_port = port_num+1;
 
+    /* set prog behaviour on recieving below Signals */
+    set_signal_handler(cleanExit);
+
 	broadcast_fd = socket(ADDR_FAMILY, SOCK_DGRAM, 0);
 	if (RC_NOTOK(broadcast_fd)) {
 		ERROR("%s errno: %s", "while creating socket.", strerror(errno));
@@ -149,13 +153,13 @@ int main(int argc, char **argv)
 
     /* now set attributes of my address struct */
     my_addr.sin_family = ADDR_FAMILY;
-	my_addr.sin_addr.s_addr = INADDR_ANY;
+	my_addr.sin_addr.s_addr = htonl(INADDR_ANY);
     my_addr.sin_port   = htons(comm_port);
 
 	if (bind(master_socket, (struct sockaddr*)&my_addr,
 			sizeof(struct sockaddr)) == -1) {
 		ERROR("%s %s", "Bind failure for master_socket. errno.:", 
-													strerror(errno));
+												strerror(errno));
 	}
 
 	if (listen(master_socket, MAX_CLIENTS) == -1) {
@@ -163,10 +167,25 @@ int main(int argc, char **argv)
 												strerror(errno));
 	}
 
-	addr_len = sizeof(struct sockaddr);
+	/* set thread to be used to detached state */
+	rc = pthread_attr_init(&attr);
+	if (rc) {
+		ERROR("%s %s", "Thread's attribute init failed. errno. :", 
+						strerror(errno));
+	}
+
+	rc = pthread_attr_setdetachstate(&attr, 
+						PTHREAD_CREATE_DETACHED);
+	if (rc) {
+		ERROR("%s errno.: %s", "Thread coudnt be set as DETACHED thread", 
+								strerror(errno));
+	}
+
 	while(TRUE) {
-	
+
 		PRINT("%s", "waiting for any msg from clients");
+		addr_len = sizeof(struct sockaddr);
+		memset(&client_addr, 0, sizeof(client_addr));
 
 		child_socket = accept(master_socket,
 							 (struct sockaddr *)&client_addr,
@@ -175,6 +194,21 @@ int main(int argc, char **argv)
 			ERROR("%s %s", "accept failed. errno. ", strerror(errno));
 		} else {
 			DEBUG("%s", "Server accept is succesfull");
+			
+			memset(&(thread_arg.addr), 0 , sizeof(struct sockaddr));
+
+			/* copy all reqd values to thread_arg_st */
+			server_state = SERVER_REG_WAIT;
+
+			thread_arg.socket_id = child_socket;
+			thread_arg.state_arg = server_state;
+			memcpy(&(thread_arg.addr), &client_addr, 
+								sizeof(struct sockaddr));
+
+			rc = pthread_create(&thread_id[i], &attr, 
+								process_via_thread, &thread_arg);
+
+			#if 0
 			server_state = SERVER_BROADCAST_SENT;
 			rc = action_on_server_state(child_socket, msg, 
 										server_state, 
@@ -183,7 +217,9 @@ int main(int argc, char **argv)
 				ERROR("%s: %s", FUNC, 
 					"failed for state SERVER_BROADCAST_SENT");
 			}
+			#endif
 		}
+		i++;
 	}
 
 	/* Though it will never reach here, but just for completion sake */
