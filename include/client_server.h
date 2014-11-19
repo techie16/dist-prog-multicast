@@ -24,6 +24,7 @@
 #define PRINT(format, ...) print_out(format, __VA_ARGS__) 
 #define DEBUG(format, ...) print_debug(format, __VA_ARGS__) 
 #define ERROR(format, ...) print_error(format, __VA_ARGS__)
+#define ALERT(format, ...) print_error(format, __VA_ARGS__)
 #define EXIT exit(0)
 #define FUNC __FUNCTION__
 #define HBT_TIME 180
@@ -33,6 +34,7 @@ extern int debug_on;
 void print_out(const char* format, ...);
 void print_debug(const char* format, ...);
 void print_error(const char* format, ...);
+void print_alert(const char* format, ...);
 
 int get_server_port_frm_file(void);
 int get_server_info_frm_file (char *addr, int *port_num);
@@ -70,12 +72,20 @@ typedef enum {
 	SERVER_MAX_STATE
 } server_state_en;
 
-typedef struct client_db {
+typedef struct client_db_ {
 	int port;
 	struct in_addr client_address;
 	int group;
 	struct client_db *next;
 } client_db_st;
+
+typedef struct new_client_db_ {
+	int socket_id;
+	int group_id;
+	struct sockaddr_in client_addr;
+	bool is_active;
+	bool is_exec;
+} new_client_db_st;
 
 typedef struct msg_st_ {
 	msg_type_en type; 
@@ -93,6 +103,9 @@ typedef struct thread_arg_st_ {
 
 void * 
 process_via_thread (void *arg);
+
+void * 
+process_data_thread (void *arg);
 
 int get_msg_data_len (int socket_id);
 
@@ -129,7 +142,7 @@ extern int comm_sock_copy;
 extern int group_id_copy;
 extern int hash_id_copy;
 
-char * get_client_state_str(client_state_en client_state);
+char * get_client_state_str(client_state_en client_state_arg);
 
 char * get_server_state_str(server_state_en server_state_arg);
 

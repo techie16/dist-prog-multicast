@@ -218,6 +218,17 @@ void print_error(const char* format, ... )
 	fprintf(stderr, "\n");
 }
 
+void print_alert(const char* format, ... ) 
+{
+    va_list args;
+	fprintf(stderr, "\n#########################################################\n");
+	fprintf(stderr, "***ALERT:");
+    va_start(args, format);
+    vfprintf(stderr, format, args );
+    va_end(args);
+	fprintf(stderr, "\n#########################################################\n");
+}
+
 int get_server_info_frm_file (char *addr, int *port_num) 
 {
 	FILE *fp = NULL;
@@ -557,6 +568,7 @@ int action_on_server_state(int socket_fd,
 			PRINT("Client: %s is DOWN, marking client as INACTIVE in db", 
 												inet_ntoa(addr->sin_addr));
 			server_state = SERVER_CLIENT_DOWN;
+			fprintf(stdout, "********************************************\n\n");
 			break;
 
 		default:
@@ -582,7 +594,7 @@ void cleanExit_client(int signum){
 	if (RC_NOTOK(rc)) {
 		ERROR("%s", "SERVER couldn't be informed about client exit");	
 	}
-	sleep(5);
+	sleep(2);
     exit(0);
 }
 
@@ -610,6 +622,28 @@ void * process_via_thread (void *arg)
 			continue;
 		}
 	}
+	return NULL;
+}
+
+void * process_data_thread (void *arg) 
+{
+	
+	int job_id = 0;
+	arg = NULL;
+	
+	DEBUG("%s: %s", FUNC, "called");
+
+	fprintf(stdout, "Job 1\n");
+	fprintf(stdout, "Job 2\n");
+	fprintf(stdout, "Job 3\n");
+	fprintf(stdout, "Job 4\n");
+	fprintf(stdout, "Select Job Id to process...");
+	
+	scanf("%d", &job_id);
+	printf("you selected: %d\n", job_id);
+
+	/* Sidd: display total clients availbl per grp 
+	 * to solve the task */
 	return NULL;
 }
 

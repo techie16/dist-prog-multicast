@@ -34,8 +34,8 @@ int main(int argc, char **argv)
 	int addr_len = 0;
     //char msg_str[MAX_MSG_STR_LEN];
 	int rc = 0;
-	thread_arg_st thread_arg;
-	pthread_t thread_id[MAX_CLIENTS];
+	thread_arg_st thread_arg[MAX_CLIENTS];
+	pthread_t thread_id[MAX_CLIENTS], data_thread;
 	pthread_attr_t attr;
 	int i = 0;
 
@@ -181,47 +181,64 @@ int main(int argc, char **argv)
 								strerror(errno));
 	}
 
+	/* create a data thread, it will communicate job to clients */
+	rc = pthread_create(&data_thread, &attr,
+						process_data_thread, NULL);
+	if (rc) {
+		ERROR("data thread creation failed errno. :%s", strerror(errno));
+	}
+
 	while(TRUE) {
-
-		PRINT("%s", "waiting for any msg from clients");
-		addr_len = sizeof(struct sockaddr);
-		memset(&client_addr, 0, sizeof(client_addr));
-
-		child_socket = accept(master_socket,
-							 (struct sockaddr *)&client_addr,
-							 (socklen_t *)&addr_len);
-		if (RC_NOTOK(child_socket)) {
-			ERROR("%s %s", "accept failed. errno. ", strerror(errno));
-		} else {
-			DEBUG("%s", "Server accept is succesfull");
+	
+		if (i < MAX_CLIENTS) {
+			PRINT("%s", "waiting for any msg from clients");
+			addr_len = sizeof(struct sockaddr);
+			memset(&client_addr, 0, sizeof(client_addr));
+	
+			child_socket = accept(master_socket,
+								 (struct sockaddr *)&client_addr,
+								 (socklen_t *)&addr_len);
+			if (RC_NOTOK(child_socket)) {
+				ERROR("%s %s", "accept failed. errno. ", 
+								strerror(errno));
+			} else {
+				DEBUG("%s", "Server accept is succesfull");
 			
-			memset(&(thread_arg.addr), 0 , sizeof(struct sockaddr));
+				memset(&(thread_arg[i]), 0 , sizeof(thread_arg_st));
 
-			/* copy all reqd values to thread_arg_st */
-			server_state = SERVER_REG_WAIT;
+				/* copy all reqd values to thread_arg_st */
+				server_state = SERVER_REG_WAIT;
 
-			thread_arg.socket_id = child_socket;
-			thread_arg.state_arg = server_state;
-			memcpy(&(thread_arg.addr), &client_addr, 
-								sizeof(struct sockaddr));
+				thread_arg[i].socket_id = child_socket;
+				thread_arg[i].state_arg = server_state;
+				memcpy(&(thread_arg[i].addr), &client_addr, 
+									sizeof(struct sockaddr));
 
-			rc = pthread_create(&thread_id[i], &attr, 
-								process_via_thread, &thread_arg);
-
-			#if 0
-			server_state = SERVER_BROADCAST_SENT;
-			rc = action_on_server_state(child_socket, msg, 
-										server_state, 
-										&client_addr, FALSE);
-			if (RC_NOTOK(rc)) {
-				ERROR("%s: %s", FUNC, 
-					"failed for state SERVER_BROADCAST_SENT");
+				rc = pthread_create(&thread_id[i], &attr, 
+								process_via_thread, &thread_arg[i]);
+				if (rc) {
+					ERROR("thread creation failed for %ith thread. errno. :%s", 
+							i, strerror(errno));
+				}
 			}
-			#endif
+
+			if ( (i+1) == MAX_CLIENTS) {
+				ALERT("%s", "Server has reached max connections permitted");
+			}
 		}
 		i++;
 	}
 
-	/* Though it will never reach here, but just for completion sake */
+	/* 
+	 * though control will never reach here, 
+	 * but for the sake of completeness 
+	 * destroy the attr created.
+	 */
+	rc = pthread_attr_destroy(&attr);
+	if (rc) {
+		ERROR("%s %s", "attr of thread cudn't be destroyed", 
+											strerror(errno));
+	}
+
     return 0;
 }

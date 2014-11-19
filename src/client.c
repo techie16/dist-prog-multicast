@@ -36,9 +36,6 @@ int main(int argc, char *argv[])
 	int rc = 0;	
 	int group_id = 0;
 
-	rc = rc;
-    /* set prog behaviour on recieving below Signals */
-	
 	/* initialize structures */
 	memset(&msg_dummy, 0, sizeof(msg_st));
 	memset(&server_addr, 0, sizeof(server_addr));
@@ -48,7 +45,9 @@ int main(int argc, char *argv[])
 
 		switch(option) {
 			default: 
-				fprintf(stderr, "   Wrong arguments specified..Plz rerun with correct args\n");
+				fprintf(stderr,
+				"Wrong argument :%c specified..Plz rerun with correct args\n", 
+																	option);
 				disp_client_help_msg();
 				goto err_exit;
 				break;
@@ -61,7 +60,7 @@ int main(int argc, char *argv[])
 
 			case 'd':
 				/* enable debugging */
-				fprintf(stdout, "   debugging enabled\n");
+				fprintf(stdout, "   debugging is enabled\n");
 				debug_on = TRUE;
 				break;
 
@@ -76,16 +75,7 @@ int main(int argc, char *argv[])
 				/* fetch server address */
 				DEBUG("%s %s", "server address to be used is:", optarg);
 				port_addr_counter++;
-				#if 0
-				server_addr.sin_addr.s_addr = inet_addr(optarg);
-				if (server_addr.sin_addr.s_addr == (in_addr_t)(-1)) {
-					ERROR("%s %s", "converting IPaddress into in_addr. errno:", 
-														strerror(errno));
-					use_def_addr = TRUE;
-				} else {
-					use_def_addr = FALSE;
-				}
-				#endif
+
 				if ( (inet_pton(ADDR_FAMILY, optarg, 
 									&(server_addr.sin_addr))) == 0) {
 					ERROR("Server address %s %s", optarg, 
@@ -145,7 +135,7 @@ int main(int argc, char *argv[])
 	addr_len = sizeof(struct sockaddr);
 	if(connect(comm_socket, (struct sockaddr*)&server_addr, 
 							addr_len) == -1) {
-		PRINT("%s %s", 
+		DEBUG("%s %s", 
 			 "SERVER is not UP, moving client to listening state. err:",
 	         strerror(errno));
 		is_server_up = FALSE;
@@ -156,7 +146,8 @@ int main(int argc, char *argv[])
 	if (!is_server_up) {
 		broadcast_socket = socket(ADDR_FAMILY, SOCK_DGRAM, 0);
 	    if (RC_NOTOK(broadcast_socket)) {
-			ERROR("%s %s", "socket creation failed. errno:", strerror(errno));
+			ERROR("%s %s", "broadcast socket creation failed. errno:", 
+							strerror(errno));
 			goto err_exit;
     	}
   
@@ -179,7 +170,6 @@ int main(int argc, char *argv[])
     		goto err_exit;
     	}
 
-	    addr_len = sizeof(struct sockaddr);
     	PRINT("%s %d", "listening for any broadcast msg from server on port:",
 			 														port_num);
 		msg = calloc(1, sizeof(msg_st));
@@ -187,6 +177,8 @@ int main(int argc, char *argv[])
 			ERROR("%s", "couln't alloc memory to msg");
 			goto err_exit;
 		}
+
+	    addr_len = sizeof(struct sockaddr);
 		numbytes = recvfrom(broadcast_socket, msg, MAX_BROADCAST_PKT_LEN,
 							0, (struct sockaddr *)&server_addr,
 							(socklen_t *)&addr_len);
@@ -217,7 +209,7 @@ int main(int argc, char *argv[])
 			ERROR("%s%s", 
 			 		"Unable to connect to Server, exiting..! errno.: ",
 	         		strerror(errno));
-			EXIT;
+			goto err_exit;
 		} else {
 			DEBUG("%s", "Connection to server is successfull");
 		}
@@ -238,13 +230,6 @@ int main(int argc, char *argv[])
 	/* Register signal events */
 	set_signal_handler(cleanExit_client);
 
-	#if 0
-    my_addr.sin_family = ADDR_FAMILY; // host byte order
-    my_addr.sin_port = htons(comm_port); 
-    my_addr.sin_addr.s_addr = htonl(INADDR_ANY); // automatically fill with my IP
-    memset(&(my_addr.sin_zero), 0, 8); // zero the rest of the struct
-	#endif
-	
 	client_state = CLIENT_INIT;
 	
 	while (client_state != CLIENT_EXIT) {
@@ -255,11 +240,10 @@ int main(int argc, char *argv[])
 		}
 	}
 
-    /* recieving is done, close the broadcast listener socket */
-	/* This is never going to happen, until someone kills the program */
-	if (broadcast_socket) {
-		close(broadcast_socket);
-	} 
+    /* 
+	 * Recieving is done, close the communication socket
+	 * Though ihis is nvr going to happen, until someone kills the program 
+	 */
 	if (comm_socket) {
 		close(comm_socket);
 	}
