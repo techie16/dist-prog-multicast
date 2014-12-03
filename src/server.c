@@ -17,7 +17,11 @@
 #include <unistd.h>
 #include <getopt.h>
 #include <pthread.h>
+#include <time.h>
+#include <sys/poll.h>
 #include "client_server.h"
+
+extern struct pollfd readfds[MAX_CLIENTS];
 
 int main(int argc, char **argv) 
 {
@@ -32,22 +36,27 @@ int main(int argc, char **argv)
 	int option = 0;
 	int reuse_sock = 1;
 	int addr_len = 0;
-    //char msg_str[MAX_MSG_STR_LEN];
-	int rc = 0;
-	thread_arg_st thread_arg[MAX_CLIENTS];
-	pthread_t thread_id[MAX_CLIENTS], data_thread;
+	int index = 0;
+	int rc = 0, msg_data_len = 0;
+	pthread_t send_t;
+	pthread_t recv_t;
+	pthread_t verify_thread;
 	pthread_attr_t attr;
 	int i = 0;
-
     int broadcast = 1;
     int numbytes = 0;
+	int num_connection = 0;
 
-	rc = rc;
-
+	/* initialize structs */
 	memset(&client_addr, 0, sizeof(client_addr));
 	memset(&broadcast_addr, 0, sizeof(broadcast_addr));
 	memset(&my_addr, 0, sizeof(my_addr));
 	memset(&dummy_msg, 0, sizeof(msg_st));
+	
+	for (i = 0; i < MAX_CLIENTS; i++) {
+		grp_data[i] = NULL;
+		client_entry[i] = NULL;
+	}
 
 	while ( (option = getopt(argc, argv, "hda:p:b:")) != -1) {
 
@@ -135,6 +144,7 @@ int main(int argc, char **argv)
 	
     if (RC_NOTOK(numbytes)) {
         ERROR("%s errno: %s", "sending BROADCAST message failed.", strerror(errno));
+		free_msg(msg);
     } else {
 		PRINT("%s %s", "Server Up Broadcast msg sent to:", 
 							inet_ntoa(broadcast_addr.sin_addr));
@@ -181,63 +191,112 @@ int main(int argc, char **argv)
 								strerror(errno));
 	}
 
-	/* create a data thread, it will communicate job to clients */
-	rc = pthread_create(&data_thread, &attr,
-						process_data_thread, NULL);
+	/* create a thread that will chk if client is ALIVE via heartbeat */
+	rc = pthread_create(&verify_thread, &attr,
+						verify_client_hbeat, NULL);
 	if (rc) {
-		ERROR("data thread creation failed errno. :%s", strerror(errno));
+		ERROR("verify_client_hbeat thread creation failed errno. :%s", 
+			 strerror(errno));
 	}
 
-	while(TRUE) {
-	
-		if (i < MAX_CLIENTS) {
-			PRINT("%s", "waiting for any msg from clients");
-			addr_len = sizeof(struct sockaddr);
-			memset(&client_addr, 0, sizeof(client_addr));
-	
-			child_socket = accept(master_socket,
-								 (struct sockaddr *)&client_addr,
-								 (socklen_t *)&addr_len);
-			if (RC_NOTOK(child_socket)) {
-				ERROR("%s %s", "accept failed. errno. ", 
-								strerror(errno));
-			} else {
-				DEBUG("%s", "Server accept is succesfull");
-			
-				memset(&(thread_arg[i]), 0 , sizeof(thread_arg_st));
+	/* create a send thread, it will communicate pkts to clients */
+	rc = pthread_create(&send_t, &attr,
+						send_thread, NULL);
+	if (rc) {
+		ERROR("send_thread creation failed errno. :%s", strerror(errno));
+	}
 
-				/* copy all reqd values to thread_arg_st */
-				server_state = SERVER_REG_WAIT;
-
-				thread_arg[i].socket_id = child_socket;
-				thread_arg[i].state_arg = server_state;
-				memcpy(&(thread_arg[i].addr), &client_addr, 
-									sizeof(struct sockaddr));
-
-				rc = pthread_create(&thread_id[i], &attr, 
-								process_via_thread, &thread_arg[i]);
-				if (rc) {
-					ERROR("thread creation failed for %ith thread. errno. :%s", 
-							i, strerror(errno));
-				}
-			}
-
-			if ( (i+1) == MAX_CLIENTS) {
-				ALERT("%s", "Server has reached max connections permitted");
-			}
-		}
-		i++;
+	/* create a recv_thread that will recv if client has sent something*/
+	rc = pthread_create(&recv_t, &attr,
+						recv_thread, NULL);
+	if (rc) {
+		ERROR("recv_thread creation failed errno. :%s", 
+			 strerror(errno));
 	}
 
 	/* 
-	 * though control will never reach here, 
-	 * but for the sake of completeness 
-	 * destroy the attr created.
+	 * Destroy the attr created, as we are done with its use
 	 */
 	rc = pthread_attr_destroy(&attr);
 	if (rc) {
 		ERROR("%s %s", "attr of thread cudn't be destroyed", 
 											strerror(errno));
+	}
+
+	/* reset i to ZERO */
+	i = 0;
+
+	while(TRUE) {
+
+		addr_len = sizeof(struct sockaddr);
+		memset(&client_addr, 0, sizeof(client_addr));
+	
+		child_socket = accept(master_socket,
+						 (struct sockaddr *)&client_addr,
+						 (socklen_t *)&addr_len);
+		if (RC_NOTOK(child_socket)) {
+			ERROR("%s %s", "accept failed. errno. ", 
+							strerror(errno));
+		} else {
+			DEBUG("%s", "Server accept is succesfull");
+			/* This would be a client registration request */
+			msg = calloc(1, sizeof(msg_st)+ msg_data_len);
+			if (!msg) {
+				ERROR("%s: %s %d", FUNC, "msg alloc failure at line", 
+								 __LINE__);
+				continue;
+			}
+            numbytes = recv(child_socket, msg, sizeof(msg_st), 0);              
+            if (RC_NOTOK(numbytes)) {                             
+            	ERROR("%s %s", "Registration recv() failed. errno.",       
+                		       strerror(errno)); 
+				free_msg(msg);
+				continue;
+            } else {
+				/* 
+				 * We need to check if its new registration req or
+				 * A client simply went down and Up and thus requesting
+				 * for re-registration 
+				 */
+				if (is_client_entry_exists(&client_addr, &index)) {
+					/* update new info for existing client entry in db */
+					upd_client_db_info(index, child_socket, 
+										client_addr.sin_port);
+					free_msg(msg);
+					continue;
+				} else {
+					i = num_connection;
+					num_connection++;
+				}
+			}
+		}
+
+		if (num_connection <= MAX_CLIENTS) {
+
+            DEBUG("%s %s %s", get_msg_type_str(msg->type),
+                           "recieved from client: ", 
+							inet_ntoa(client_addr.sin_addr)); 
+			server_state = SERVER_REG_RECV;
+
+			/* Save the recvd details to client_db */
+			add_client_db_info(i, child_socket, msg->group_id, &client_addr);
+			
+			/* free the msg mem*/
+			free_msg(msg);
+
+			/* Also add this client_id to group_data db */
+			rc = add_hash_id_to_grp(i, client_entry[i]->group_id, 
+						  &(grp_data[client_entry[i]->group_id]));
+			if (RC_NOTOK(rc)) {
+				ERROR("%s", "malloc failure while adding hash_id to grp");
+						continue;
+			}
+
+			ALERT("%s", "Press Enter to proceed to Job execution");
+		} else {
+
+			ALERT("%s", "Server has reached max connections permitted");
+		}
 	}
 
     return 0;

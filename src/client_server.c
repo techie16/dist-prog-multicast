@@ -17,12 +17,19 @@
 #include <string.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <sys/poll.h>
 #include "client_server.h"
 
-client_db_st *head = NULL, *current = NULL;
 int debug_on = FALSE;
+bool hbeat_chk_start = FALSE;
+bool disp_cons_job = TRUE;
 client_state_en client_state = CLIENT_RES;
 server_state_en server_state = SERVER_RES;
+client_db_st *client_entry[MAX_CLIENTS];
+grp_data_st  *grp_data[MAX_CLIENTS];
+int total_fd;
+struct pollfd readfds[MAX_CLIENTS];
+time_t job_sent_ts = 0;
 
 struct sockaddr_in server_addr_copy;
 int comm_port_copy = 0;
@@ -32,11 +39,67 @@ int hash_id_copy = 0;
 
 void set_signal_handler(void (*f)(int)) {
 
+	/* Ignore broken Pipe error */
+	signal(SIGPIPE, SIG_IGN);
+
+	/* Handle rest via function */
     signal(SIGTERM, *f);
     signal(SIGINT, *f);
     signal(SIGABRT, *f);
     signal(SIGFPE, *f);
     signal(SIGSEGV, *f);
+}
+
+void upd_client_db_info(int index, int new_socket_fd, 
+						int port_num)
+{
+
+	DEBUG("client id %d (%s) of group: %d %s", 
+		  index, inet_ntoa(client_entry[index]->addr),
+		  client_entry[index]->group_id, "requested re-registration");
+
+	client_entry[index]->socket_id 	= new_socket_fd;
+	client_entry[index]->port_num 	= port_num;
+	client_entry[index]->is_active  = TRUE;
+	client_entry[index]->server_ack = FALSE;
+	client_entry[index]->is_participant = FALSE;
+
+	/* set the socket_fd to readfd group, for poll() */	
+	readfds[index].fd = new_socket_fd;
+	readfds[index].events = POLLIN;
+}
+
+void add_client_db_info(int index, int socket_fd,
+						short grp_id, struct sockaddr_in *client_addr)
+{
+	int i = index;
+	client_entry[i] = (client_db_st *) calloc(1, sizeof(client_db_st));
+
+	if (!client_entry[i]) {
+		ERROR("%s %d file: %s", "calloc failure at line:", __LINE__, __FILE__);
+		return;
+	}
+
+	client_entry[i]->socket_id = socket_fd;
+	if (IGNORE_GROUP) {
+		client_entry[i]->group_id = (i/4); 
+	} else {
+		client_entry[i]->group_id = grp_id;
+	}
+	client_entry[i]->hash_id = index; 
+	client_entry[i]->family = client_addr->sin_family;
+	client_entry[i]->port_num = client_addr->sin_port;
+	client_entry[i]->addr = client_addr->sin_addr;
+	client_entry[i]->is_active  = TRUE;
+	client_entry[i]->is_exec    = FALSE;
+	client_entry[i]->server_ack = FALSE;
+
+	/* set this socket_fd to readfd group, for use in poll() */	
+	readfds[i].fd = client_entry[i]->socket_id;
+	readfds[i].events = POLLIN;
+	
+	/* incr the total_fd counter to be used by Poll */
+	total_fd++;
 }
 
 char * get_msg_type_str (msg_type_en msg_type) 
@@ -56,7 +119,13 @@ char * get_msg_type_str (msg_type_en msg_type)
 			return "ACK_FRM_SERVER";    
 
         case HEARTBEAT:
-			return "HEARTBEAT";    
+			return "HEARTBEAT";
+
+		case JOB_REQ:
+			return "JOB_REQ";
+
+		case JOB_RESP:
+			return "JOB_RESP";
 
         case CLIENT_DOWN:
 			return "CLIENT_DOWN";
@@ -132,58 +201,276 @@ char * get_server_state_str(server_state_en server_state_arg)
 	return "SERVER_UNKNOWN_STATE";
 }
 
-void initialize_addr_struct (struct sockaddr_in *addr, int port_num) 
+int add_hash_id_to_grp (short hash_id, short grp_id, 
+						grp_data_st **ptr) 
 {
 
-    addr->sin_family = ADDR_FAMILY;
-    addr->sin_addr.s_addr = htonl(INADDR_ANY);
-    addr->sin_port = htons(port_num);
-}
+	grp_data_st *temp = NULL, *current = NULL;
 
-void add_entry_to_db (struct in_addr client_addr, int port_num, int grp) 
-{
-
-	client_db_st *entry = NULL;
-	entry = (client_db_st *) malloc(sizeof(client_db_st));
-
-	printf("Sidd: entry to add.. size to alloc: %zd\n", sizeof(client_db_st));	
-	if (!entry) {
-		fprintf(stderr, "malloc failure, while creating entry \n");
-	}
-	memset(entry, 0, sizeof(client_db_st));
-
-	entry->port = port_num;
-	printf("Sidd: entry ..port: %d\n", port_num); // addr: %ld, grp: %d\n", port_num, client_addr, grp);
-	entry->client_address = client_addr;
-	entry->group = grp;
-	entry->next = NULL;
-
-	if (head != NULL) {
-		current->next = entry;
-		current = entry;
-	} else {
-		/* this is the 1st entry */
-		head = entry;
-		current = head;
-	}
-
-	printf("Sidd: entry addition success\n");
-}
-
-int count_total (void) 
-{
-	int count = 0;
-	client_db_st *temp = head;
-
+	temp = (grp_data_st *) calloc(1, sizeof(grp_data_st));
 	if (!temp) {
-		return 0;
+		return -1;
+	}
+	temp->hash_id = hash_id;
+	temp->next = NULL;
+	current = *ptr;
+
+	if (!*ptr) {
+		*ptr = temp;
+		current = *ptr;
+	} else {
+		while(current->next != NULL) {
+			current = current->next;
+		}
+		current->next = temp;
+		current = temp;
 	}
 
-	while (temp != NULL) {
-		count++;
-		temp = temp->next;
+	DEBUG("hashid %d added succesfully to grp: %d", hash_id, grp_id);
+	return 0;
+}
+
+int send_pkt_to_client (int socket_id, msg_type_en msg_type, 
+						int index, job_st *data)
+{
+
+	int msg_data_len = 0;
+	msg_st *msg = NULL;
+	int rc = 0;
+	
+	if (!data) {
+		msg_data_len = 0;
+	} else {
+		msg_data_len = sizeof(job_st);
 	}
-	return count;
+
+	switch (msg_type) {
+		
+		case ACK_FRM_SERVER:
+			msg = (msg_st *)calloc(1, sizeof(msg_st)+msg_data_len);
+			if (!msg) {
+				ERROR("%s %d file : %s", "alloc for ACK msg failed at line:",
+				  			     __LINE__, __FILE__);
+				return -1;
+			}
+
+		 	msg->type = msg_type;
+			msg->len = msg_data_len;
+			msg->group_id = client_entry[index]->group_id; 	
+			msg->hash_id = client_entry[index]->hash_id;
+
+			rc = send(socket_id, msg, sizeof(msg_st)+msg_data_len, 0);
+			if (RC_NOTOK(rc)) {
+				ERROR("%s %s %s", get_msg_type_str(msg_type),
+					"failed to be sent to client: with hash_id: %d. errno: %s",
+					 inet_ntoa(client_entry[index]->addr), msg->hash_id,
+					 strerror(errno));
+				free_msg(msg);
+				return rc;
+			} else {
+				client_entry[index]->server_ack = TRUE;
+				client_entry[index]->hbeat_time = 0;
+				free_msg(msg);
+			}
+			break;
+
+		case JOB_REQ:
+			msg = (msg_st *)calloc(1, sizeof(msg_st)+msg_data_len);
+			if (!msg) {
+				ERROR("%s %d file : %s", "alloc for ACK msg failed at line:",
+				  			     __LINE__, __FILE__);
+				return ERR_CODE;
+			}
+
+		 	msg->type = msg_type;
+			msg->len = msg_data_len;
+			msg->group_id = client_entry[index]->group_id; 	
+			msg->hash_id = client_entry[index]->hash_id;
+			if (!data) {
+				ERROR("%s: data part is NULL", FUNC);
+				free_msg(msg);
+				return ERR_CODE;
+			}
+			if (msg_data_len && data) {
+				msg->job_data->job_id = data->job_id;
+				msg->job_data->start_range = data->start_range;
+				msg->job_data->end_range   = data->end_range;
+				strcpy(msg->job_data->inpt_file, data->inpt_file);
+				strcpy(msg->job_data->outpt_file, data->outpt_file);
+			}
+
+			rc = send(socket_id, msg, sizeof(msg_st)+msg_data_len, 0);
+			if (RC_NOTOK(rc)) {
+				ERROR("%s %s %s", get_msg_type_str(msg_type),
+					"failed to be sent to client: with hash_id: %d. errno: %s",
+					 inet_ntoa(client_entry[index]->addr), msg->hash_id,
+					 strerror(errno));
+				free_msg(msg);
+				return rc;
+			} else {
+				DEBUG("Job_id: %d sent to client: %s(hash_id: %d)",
+					 data->job_id, inet_ntoa(client_entry[index]->addr), 
+					 msg->hash_id);
+				free_msg(msg);
+			}
+			break;
+
+		default:
+			DEBUG("%s: No need to send pkt for msg: %s", FUNC, 
+				 get_msg_type_str(msg_type));
+	}
+	
+	return rc;
+}
+
+void display_job_info (int *job_id) {
+	
+	int i = 0;
+	printf("\n################################################\n");	
+	while (TRUE) {
+		fprintf(stdout, "Job 1: calculate Prime numbers\n");
+		fprintf(stdout, "Job 2: calculate max in set of nos.\n");
+		fprintf(stdout, "Job 3: calculate work counts in File\n");
+		fprintf(stdout, "Job 4: calculate Sum of series\n");
+		fprintf(stdout, "Select Job Id to process...");
+	
+		scanf("%d", job_id);
+		printf("You selected: %d\n", *job_id);
+		printf("################################################\n");	
+		if (*job_id < (JOB_RES+1)  && (*job_id >= JOB_MAX_ID)) {
+			printf("Input must be from Displayed Job_IDs.. Try again\n");
+			continue;
+		} else {
+			break;
+		}
+	}
+	printf("Below are the available clients to help in the Job\n");
+	printf("--------------------------------------------------------\n");
+
+	for (i = 0; i < MAX_CLIENTS; i++) {
+		if (grp_data[i] != NULL) {
+			display_grp_info(i);
+		}
+	}
+	printf("--------------------------------------------------------\n");
+}
+
+int send_job_to_grp(job_id_en job_id) {
+
+	int i = 0, count_client = 0, rc = 0;
+	int total_grp = 0;
+	int total_set = 0;
+	int set_per_grp = 0;
+	int start_num = 0, end_num = 0;
+	int start_sub_num = 0, end_sub_num = 0;
+	int factor_inc = 0;
+	int socket_id = 0;
+	bool send_grp_fail = FALSE;
+	job_st *job_det = NULL;
+	grp_data_st *temp = NULL;
+	
+	total_grp = count_total_grp();
+
+	job_det = (job_st *) calloc(1, sizeof(job_st));
+	if (!job_det) {
+		ERROR("calloc failed at Line: file: %s", __LINE__, __FILE__);
+		return -1;
+	}
+
+	switch (job_id) {
+
+		case JOB_PRIME:
+			start_num = 1;
+			end_num = 32767;
+			total_set = (end_num - start_num)/total_grp;
+			
+			for (i = 0; i < MAX_CLIENTS; i++) {
+				if (grp_data[i] != NULL) { 
+					
+					count_client = count_grp_total(i);
+					printf("Sidd: client per grp: %d\n", count_client);
+					start_sub_num = start_num;
+					end_sub_num = start_num + total_set + factor_inc - 1;
+					printf("Sidd: start: %d end: %d\n", start_sub_num, end_sub_num);
+					set_per_grp = (end_sub_num - start_sub_num)/count_client;
+					printf("Sidd: set_per_grp : %d\n", set_per_grp);
+					temp = grp_data[i];
+					while (temp != NULL) {
+						send_grp_fail = TRUE;
+						start_sub_num = start_num;
+						end_sub_num = start_num + set_per_grp + factor_inc;
+						printf("Sidd: in while LOOP start: %d end: %d\n", 
+								start_sub_num, end_sub_num);
+						
+						/* set job details */
+						job_det->job_id = job_id;
+						job_det->start_range = start_sub_num;
+						job_det->end_range   = end_sub_num;
+						memset(job_det->inpt_file, 0, FILE_NAME_LEN);
+						memset(job_det->outpt_file, 0, FILE_NAME_LEN);
+					
+						/* fetch socket_id where the pkt will be sent */	
+						socket_id = client_entry[temp->hash_id]->socket_id;
+						rc = send_pkt_to_client(socket_id, 
+												JOB_REQ, temp->hash_id, 
+												job_det);
+						if (RC_NOTOK(rc)) {
+							ERROR("%s hash_id: %d", 
+								  "couldnt send job pkt to client with", 
+								  temp->hash_id);
+							start_sub_num = start_sub_num;
+							factor_inc = set_per_grp;
+						} else {
+		                   /* 
+        		            * Mark client is_exec flag to TRUE, move to FALSE,
+							* once execution is completed  
+                     		*/
+		                    client_entry[temp->hash_id]->is_exec = TRUE;
+		                    client_entry[temp->hash_id]->is_participant = TRUE;
+							client_entry[temp->hash_id]->server_ack = TRUE;
+
+							/* Update ranges for new client*/
+							start_num = end_sub_num + 1;
+							factor_inc = 0;
+							send_grp_fail = FALSE;
+						}
+						printf("Sidd: NEW start: %d end: %d\n", 
+										start_sub_num, end_sub_num);
+				
+						/* move to next ptr */
+						temp = temp->next;
+					}
+	
+					/* move to next grp */
+					/* if last grp sending has failed, we need reset 
+				     * numbers to be sent 
+					 */
+					if (send_grp_fail) {
+						start_num = start_sub_num;
+						factor_inc = total_set;
+					} else {
+						start_sub_num = end_sub_num + 1;
+						factor_inc = 0;
+					}
+				}
+			}
+			break;
+
+		case JOB_WC:
+			break;
+
+		case JOB_SERIES:
+			break;
+		
+		case JOB_FIND_MAX:
+			break;
+		
+		default:
+			ERROR("%s job_id: %d", "in default: no such JOB found.", job_id);
+			break;
+	}
+
+	return rc;
 }
 
 void print_out(const char* format, ... )
@@ -328,6 +615,150 @@ int get_server_port_frm_file (void)
 	return port_num;
 }
 
+void display_job_output(void)
+{
+	int i = 0, read_val = 0;
+	FILE *fp = NULL;
+	int count = 0;
+	int num1 = 0;
+
+	for(i = 0; i < MAX_CLIENTS; i++) {
+		if (client_entry[i] != NULL && client_entry[i]->is_participant 
+				&& !client_entry[i]->is_exec) {
+			fp = fopen(client_entry[i]->file_outp, "r");
+			if (!fp) {
+				ERROR("File %s (output from client_id: %d) for reading failed",
+					  client_entry[i]->file_outp, i);
+				continue;
+			} else {
+				ALERT("%s %d", "output recieved from client_id:", i);
+			}
+
+			while ((read_val = fscanf(fp, "%d", &num1)) != EOF) {
+				if (read_val == 1) {
+					count++;	
+				}
+				
+				printf("%d ", num1);
+
+				// display from new line once 10 numbers are printed
+				if (count == 10) {
+					printf("\n");
+					count = 0;
+				}
+			}
+			//flush any rem data in buffer
+			printf("\n");
+			fflush(stdout);
+			DEBUG("%s %d is over", "Ouput from Client:", i);
+			fclose(fp);
+			client_entry[i]->is_participant = FALSE;
+			count = 0;
+		}
+	}
+
+	//reset job_sent timestamp, it will be set once a new job is executed
+	job_sent_ts = 0;
+}
+
+inline bool is_prime (int num)
+{
+	int p =1, s = 1, i = 0;
+	
+	/* 
+	 * logic to find square root of num which is 
+	 * just less or equal.
+	 */
+	while (p <= num) {
+		s++;
+		p = s*s;
+	}
+
+	for (i = 2; i < s; i++) {
+		if (num%i == 0) {
+			return FALSE;
+		}
+	}
+	
+	return TRUE;
+}
+
+int del_file_if_exist(char *file) 
+{
+	
+	if (!file) {
+		return ERR_CODE;
+	}
+
+	if (!access(file, F_OK)) {
+		if (remove(file)) {
+			ERROR("%s. %s errno: %s", "Unable to delete file:", file, 
+				 strerror(errno));
+			return ERR_CODE;
+		}
+	}
+	return 0;
+}
+
+int compute_job(job_st *data, char *file)
+{
+
+	int start_num = 0, end_num = 0, i = 0;
+	FILE *fp = NULL;
+	char ascii_num[MAX_ASC_CHLEN];
+
+	if (!data) {
+		ERROR("%s: %s", FUNC, "data is NULL, exiting");
+		return ERR_CODE;
+	}
+
+	if (!file) {
+		ERROR("%s: %s", FUNC, "filename is NULL, exiting");
+		return ERR_CODE;
+	}
+
+	start_num = data->start_range;
+	end_num   = data->end_range;
+
+	switch(data->job_id) {
+		
+		case JOB_PRIME:
+			//Delete File if already exist
+			(void) del_file_if_exist(file);
+
+			fp = fopen(file, "a+");
+			if (!fp) {
+				ERROR("%s: %s", FUNC, "fp for filename is NULL, exiting");
+				return ERR_CODE;
+			}
+
+			for(i = start_num; i <= end_num; i++) {
+				if (is_prime(i)) {
+					//write this number to output file
+					snprintf(ascii_num, MAX_ASC_CHLEN, "%d ", i);
+					fputs(ascii_num, fp);
+				}
+			}
+			fclose(fp);
+			break;
+
+		case JOB_WC:
+			break;
+
+		case JOB_SERIES:
+			break;
+
+		case JOB_FIND_MAX:
+			break;
+		
+		default:
+			ERROR("%s: %s", FUNC, "in default, exiting");
+			return ERR_CODE;
+	}
+
+	return 0;
+}
+
 int action_on_client_state(int socket_fd, 
 						   client_state_en client_state_arg,	 
 		                   struct sockaddr_in *addr)
@@ -335,11 +766,15 @@ int action_on_client_state(int socket_fd,
 	int rc = 0;
 	int numbytes = 0;
 	msg_st *msg = NULL;
-	msg_st dummy_msg;
 	int msg_data_len = 0;
-		
-	memset(&dummy_msg, 0, sizeof(msg_st));
-
+	static int hash_id = 0, group_id = 0;
+	static time_t base_time = 0;
+	time_t curr_time = 0;
+	static int hbeat_counter = 0;
+	bool is_hbt_time_set = FALSE;
+	char outp_file[FILE_NAME_LEN];
+	int job_id = 0;
+	
 	/* chk if socket_fd is valid ? */
 	if (!socket_fd) {
 		ERROR("%s %s", FUNC, "socket_fd is not valid");
@@ -389,10 +824,14 @@ int action_on_client_state(int socket_fd,
 							       strerror(errno));
 					return ERR_CODE;
                 } else {
-					PRINT("%s %s", get_msg_type_str(msg->type),
-									  "recieved from server");
-					client_state = CLIENT_ACK_OK;
+					PRINT("%s %s hash_id: %d grp_id: %d", 
+								get_msg_type_str(msg->type),
+								"recieved from server", msg->hash_id, 
+                                msg->group_id);
+					hash_id = msg->hash_id;
+					group_id = msg->group_id;
 					free_msg(msg);
+					client_state = CLIENT_ACK_OK;
 				}
 			}
 			break;
@@ -402,27 +841,126 @@ int action_on_client_state(int socket_fd,
 			 * Client will send periodic hearbeats to server to inform 
 			 * server that its still alive 
 			 */
-			sleep(HBT_TIME);
-			msg = calloc(1, sizeof(msg_st));
-			CHK_ALLOC(msg);
-			
-			msg->type = HEARTBEAT;
-			msg->len = 0;
-			msg->group_id = 1;
-			msg->hash_id = 1;
-	
-			numbytes = send(socket_fd, msg, sizeof(msg), 0);
-			if (RC_NOTOK(numbytes)) {
-				ERROR("%s %s", 
+			hbeat_counter++;
+			is_hbt_time_set = FALSE;
+			if (hbeat_counter == 1) {
+				base_time = time(NULL);	
+			}
+			sleep(1);
+			curr_time = time(NULL);
+
+			if (( (curr_time-base_time) >= (HBT_TIME-1)) &&
+				 ((curr_time-base_time) <= (HBT_TIME+1))) {
+				base_time = time(NULL);
+				is_hbt_time_set = TRUE;
+			}
+		
+			if (is_hbt_time_set || (hbeat_counter == 1)) {
+
+				msg = calloc(1, sizeof(msg_st));
+				if (!msg) {
+					ERROR("Calloc failed during HBEAT case at line: %d file: %s",
+						  __LINE__, __FILE__);
+					return ERR_CODE;
+				}
+				msg->type = HEARTBEAT;
+				msg->len = 0;
+				msg->group_id = group_id;
+				msg->hash_id = hash_id;
+				printf("Sidd: sock_id: %d hash_id: %d is sent\n", 
+									socket_fd, msg->hash_id);	
+				numbytes = send(socket_fd, msg, sizeof(msg_st), 0);
+				if (RC_NOTOK(numbytes)) {
+					ERROR("%s %s", 
 					  "HEARTBEAT msg cudn't be send to server. errno: ", 
 					   strerror(errno));
-				return ERR_CODE;
-			} else {
-				DEBUG("%s %s for group_id: %d", 
+					free_msg(msg);
+					return ERR_CODE;
+				} else {
+					DEBUG("%s %s for group_id: %d", 
 						"HEARTBEAT msg sent to server: ", 
 						inet_ntoa(addr->sin_addr), msg->group_id);
-				client_state = CLIENT_ACK_OK;
-				free_msg(msg);
+					client_state = CLIENT_ACK_OK;
+					free_msg(msg);
+				}
+			}
+
+			/* Now chk in NON-WAIT mode for any recv pkt */
+			msg_data_len = get_msg_data_len_non_wait(socket_fd); 
+			if (msg_data_len == 0 || RC_NOTOK(msg_data_len)) {
+				break;
+			} else {
+				/* we have recieved a valid PKT with proper len */
+				msg = calloc(1, sizeof(msg_st)+msg_data_len);
+				if (!msg) {
+					ERROR("Calloc failed during HBEAT case at line: %d file: %s",
+						  __LINE__, __FILE__);
+					return ERR_CODE;
+				}
+
+                numbytes = recv(socket_fd, msg,
+                                sizeof(msg_st)+msg_data_len, 0);
+                if (RC_NOTOK(numbytes)) {
+                    ERROR("%s %s", "msg recv() failed. errno.", 
+							       strerror(errno));
+					free_msg(msg);
+					return ERR_CODE;
+                } else {
+					PRINT("%s %s", 
+								get_msg_type_str(msg->type),
+								"recieved from server");
+					if (msg->type == JOB_REQ) {
+						
+						job_id = msg->job_data->job_id; 
+
+						DEBUG("%s %d (from_num: %d to_num: %d)",
+							  "Recvd JOB_REQ. job_id:", 
+							  job_id, msg->job_data->start_range, 
+							  msg->job_data->end_range);
+	
+						snprintf(outp_file, FILE_NAME_LEN, "clnt_job_%d_%d", 
+								job_id, hash_id);
+						DEBUG("%s %s", "output file will be:", outp_file);
+
+						rc = compute_job(msg->job_data, outp_file);
+						if (RC_NOTOK(rc)) {
+							free_msg(msg);
+							break;
+						} else {
+							free_msg(msg);
+							/* Construct a JOB_RES msg */
+							msg = (msg_st *) calloc(1, sizeof(msg_st) + sizeof(job_st));
+							if (!msg) {
+								ERROR("%s %d file: %s", 
+									  "calloc failed at line:",
+									  __LINE__, __FILE__);
+								break;
+							}
+							msg->type = JOB_RESP;
+							msg->len = sizeof(job_st);
+							msg->group_id = group_id;
+							msg->hash_id = hash_id;
+							msg->job_data->job_id = job_id;
+							strcpy(msg->job_data->outpt_file, outp_file);
+
+							numbytes = send(socket_fd, msg, msg->len, 0);
+							if (RC_NOTOK(numbytes)) {
+								ERROR("%s %d %s errno: %s", 
+									  "Job_RESP for job_id:", job_id, 
+									  "couldn't be sent.", strerror(errno));
+								free_msg(msg);
+								break;
+							} else {
+								PRINT("%s %d in file: %s %s", 
+									 "JOB_RESP for job_id:", 
+									 job_id, msg->job_data->outpt_file, 
+									 "sent successfully");
+								free_msg(msg);
+							}
+						}
+					}
+					client_state = CLIENT_ACK_OK;
+				}
 			}
 			break;
 
@@ -431,10 +969,10 @@ int action_on_client_state(int socket_fd,
 			msg = calloc(1, sizeof(msg_st));
 			msg->type = CLIENT_DOWN;
 			msg->len = 0;
-			msg->group_id = 1;
-			msg->hash_id = 1;
-	
-			numbytes = send(socket_fd, msg, sizeof(msg), 0);
+			msg->group_id = group_id;
+			msg->hash_id = hash_id;
+
+			numbytes = send(socket_fd, msg, sizeof(msg_st), 0);
 			if (RC_NOTOK(numbytes)) {
 				ERROR("%s %s", 
 					  "CLIENT_DOWN msg cudn't be send to server. errno: ", 
@@ -578,8 +1116,80 @@ int action_on_server_state(int socket_fd,
 	return rc;
 }
 
+int server_action_on_msg(int socket_id, int hash_id,
+						 msg_st *msg)
+{
+
+	if (!msg) {
+		ERROR("%s %s", FUNC, "msg is Null");
+		return ERR_CODE;
+	}
+	
+	switch (msg->type) {
+		
+		case REGISTER_CLIENT:
+			/* Do nothing for now */
+			break;
+
+		case HEARTBEAT:
+			client_entry[hash_id]->is_active = TRUE;
+			client_entry[hash_id]->hbeat_time = time(NULL);
+
+			DEBUG("Sock_Id: %d recvd Hearbeat for hash_id: %d from client: %s",
+					socket_id,  
+					hash_id, inet_ntoa(client_entry[hash_id]->addr));
+			break;
+		
+		case JOB_RESP:
+			client_entry[hash_id]->is_exec = FALSE;
+			strcpy(client_entry[hash_id]->file_outp, msg->job_data->outpt_file);
+
+			DEBUG("JOB RESPONSE recvd from Client_id: %d (%s) for Job_id: %d",
+					hash_id, inet_ntoa(client_entry[hash_id]->addr), 
+					msg->job_data->job_id);
+			break;
+
+		case CLIENT_DOWN:
+			client_entry[hash_id]->is_active = FALSE;
+			readfds[hash_id].fd = -1;
+			DEBUG("Sock_Id: %d rcvd CLIENT_DOWN for hash_id: %d frm client: %s",
+				   socket_id, 
+				   hash_id, inet_ntoa(client_entry[hash_id]->addr));
+			PRINT("Client: %s hash_id: %d has been marked Inactive", 
+				  inet_ntoa(client_entry[hash_id]->addr), hash_id);
+			break;
+
+		default:
+			DEBUG("%s: In default case", FUNC);
+	}
+	
+	return 0;
+}
+
+char * sigtostr(int signum)
+{
+	switch (signum) {
+
+		case SIGPIPE:
+			return "SIGPIPE";	
+		case SIGTERM:
+			return "SIGTERM";
+		case SIGINT:
+			return "SIGINT";
+		case SIGABRT:
+			return "SIGABRT";
+		case SIGFPE:
+			return "SIGFPE";
+		case SIGSEGV:
+			return "SIGSEGV";
+		default:
+			return "UNKNOWN";
+	}
+}
+
 void cleanExit(int signum){
-    printf("Program exiting with signum: %d\n", signum);
+
+    printf("Program exiting with signal: %s\n", sigtostr(signum));
     exit(0);
 }
 
@@ -587,7 +1197,7 @@ void cleanExit_client(int signum){
 	
 	int rc = 0;
 
-    PRINT("Recieved EXIT(signum: %d) %s", signum, "signal, Informing Server");
+    PRINT("Recieved EXIT(signal: %s) %s", sigtostr(signum), " Informing Server");
 
 	rc = action_on_client_state(comm_sock_copy, CLIENT_EXIT, 
 								&server_addr_copy);
@@ -625,26 +1235,394 @@ void * process_via_thread (void *arg)
 	return NULL;
 }
 
+int count_total_grp (void) {
+	int i = 0;
+	int counter = 0;
+	for (i = 0; i < MAX_CLIENTS; i++) {
+		if (grp_data[i] != NULL) {
+			counter++;
+		}
+	}
+	return counter;
+}
+
+int display_grp_info (short grp_id) 
+{
+
+	grp_data_st *temp = NULL;
+	temp = grp_data[grp_id];
+	int counter = 0;
+	
+	PRINT("Group Id: %d contains below Client_ids: ", grp_id);
+	while (temp != NULL) {
+		printf(" %d ", temp->hash_id);
+		temp = temp->next;
+		counter++;
+	}
+
+	printf("\nTotal: %d\n", counter);
+	printf("--------------------------------------------------------\n");
+	return counter;
+}
+
+int count_grp_total (short grp_id) 
+{
+
+	grp_data_st *temp = NULL;
+	temp = grp_data[grp_id];
+	int counter = 0;
+	
+	while (temp != NULL) {
+		temp = temp->next;
+		counter++;
+	}
+
+	return counter;
+}
+
 void * process_data_thread (void *arg) 
 {
 	
-	int job_id = 0;
-	arg = NULL;
+	DEBUG("%s: %s", FUNC, "entered, waiting for ENTER key event");
+	time_t time_spent = 0;
+	time_t time_tracker = 0;
+	int job_id = 0, rc = 0, i = 0;
+	static int counter = 0;
+	msg_st *msg = NULL;
+	int msg_data_len = 0;
+
+	/* reset hbeat_chk_start to FALSE  at the start*/	
+	hbeat_chk_start = FALSE;
+
+	while (TRUE) {
+		if (getchar() == '\n') {
+			DEBUG("%s", "User pressed Enter, continue Job execution");
+			hbeat_chk_start = TRUE;
+			break;
+		}
+	}
 	
 	DEBUG("%s: %s", FUNC, "called");
+	arg = NULL;
 
-	fprintf(stdout, "Job 1\n");
-	fprintf(stdout, "Job 2\n");
-	fprintf(stdout, "Job 3\n");
-	fprintf(stdout, "Job 4\n");
-	fprintf(stdout, "Select Job Id to process...");
+	/* Display Available Jobs which can be executed */ 
+	display_job_info (&job_id);
+
+	while (TRUE) {
 	
-	scanf("%d", &job_id);
-	printf("you selected: %d\n", job_id);
+		counter++;
+		printf("Sidd: inside while\n");
 
+		for (i = 0; i < MAX_CLIENTS; i++) {
+
+			if (client_entry[i] != NULL && 
+				client_entry[i]->is_participant &&
+				!client_entry[i]->is_exec) {
+				
+			}
+			/* 
+			 * If any client's server_ack is pending, then server must 
+			 * first send an ack to server, informing client abt 
+			 * the group  and hash_id the client has been associated to
+			 */
+			if (client_entry[i] != NULL && client_entry[i]->is_active) {
+
+				if (client_entry[i]->server_ack == FALSE) {
+					
+					rc = send_pkt_to_client(client_entry[i]->socket_id, 
+											ACK_FRM_SERVER, i, NULL);
+					if (RC_NOTOK(rc)) {
+						/* move fwd with other clients */
+						continue;
+					}
+				}
+			} // client_entry null chk
+		} //for loop end
+	
+		if (counter == 1) {	
+			rc = send_job_to_grp(job_id);
+			if (RC_NOTOK(rc)) {
+				ERROR("Job_id: %d %s", "sending failed to grp");
+			} else {
+				/* 
+				 * Reset time_spent to ZERO, for allowing 
+				 * JOB_WAIT_TIME for new jobs */
+				time_spent = 0;
+			}
+		}
+	
+		time_tracker = time(NULL);	
+		rc = poll(readfds, total_fd, (JOB_WAIT_TIME - time_spent)*SECS_IN_MSEC);
+		if (RC_NOTOK(rc)) {
+			ERROR("%s %s", "poll() failed. errno:", strerror(errno));
+		} else if (rc == EAGAIN) {
+			if (JOB_WAIT_TIME - time_spent == 0) {
+				/* logic to convey all wait is done and disp all recvd
+				 * results from all clients */ 
+			} else {
+				continue;
+			}
+		}
+
+		time_spent = time(NULL) - time_tracker; /* update time_spent */
+		if (time_spent >= JOB_WAIT_TIME) {
+			/* reset to max, so that val doesnt go to negative */
+			time_spent = JOB_WAIT_TIME;
+		}
+		printf("Sidd: Poll returned. %d items are set\n", rc);
+		for (i = 0; i < MAX_CLIENTS; i++) {
+
+			if (client_entry[i] != NULL) {
+
+				if ((readfds[i].revents & POLLHUP) || (readfds[i].revents & POLLERR)) {
+					ALERT("%s", "recvd client down");
+				}
+	
+				/* chk if any readfd is set */	
+				if (readfds[i].revents & POLLIN) {
+					DEBUG("Socket_id: %d is set", readfds[i].fd);
+					msg_data_len = get_msg_data_len(client_entry[i]->socket_id);					
+					if (RC_NOTOK(msg_data_len)) {
+						continue;
+					}
+
+					msg = (msg_st *)calloc(1, sizeof(msg_st)+msg_data_len);
+					if (!msg) {
+						ERROR("%s", "alloc failure while recv pkt frm client");
+					}
+					rc = recv(client_entry[i]->socket_id, msg, 
+							sizeof(msg_st)+msg_data_len, 0);
+					if (RC_NOTOK(rc)) {
+						ERROR("%s %s", 
+								"pkt failed to be recvieved frm client:",
+								inet_ntoa(client_entry[i]->addr));
+					} else {
+						rc = server_action_on_msg(client_entry[i]->socket_id, 
+												  i, msg);
+						if (RC_NOTOK(rc)) {
+							ERROR("%s: %s", FUNC, "failed");
+						}
+					}
+				}
+			} // client_entry null chk
+		} //for loop end
+	}	//while end
+	
 	/* Sidd: display total clients availbl per grp 
 	 * to solve the task */
 	return NULL;
+}
+
+void * verify_client_hbeat (void *arg) 
+{
+	int i = 0;
+	arg = NULL;
+	time_t curr_time = 0;
+	int job_pend_counter = 0;
+	int job_exec_start = 0;
+
+	DEBUG("%s: %s", FUNC, "called");	
+
+	/* probe every HBT_TIME if heartbeat is recvd properly */
+	while (TRUE) {
+
+		//reset job_pend_counter 
+		job_pend_counter = 0;
+		job_exec_start   = 0;
+
+		/* As Job execution starts, hbeat_chk_start will be set to TRUE */
+		if (hbeat_chk_start == FALSE) {
+			continue;
+		}
+
+		curr_time = time(NULL);
+
+		// chk if client HBEAT Timestamp hasn't expired	
+		for(i = 0; i < MAX_CLIENTS; i++) {
+			if (client_entry[i] != NULL && 
+					client_entry[i]->is_active && 
+					client_entry[i]->hbeat_time != 0) {
+				if ((curr_time - client_entry[i]->hbeat_time) > HBT_EXPTIME) {
+					client_entry[i]->is_active = FALSE;
+					DEBUG("Client_id: %d (%s) has been marked inactive %s", i,
+						  inet_ntoa(client_entry[i]->addr),
+						  "due to no HEARTBEAT signal");
+				}
+			}
+		}
+
+		//check if any of the client is still executing JOB
+		for(i = 0; i < MAX_CLIENTS; i++) {
+			if (client_entry[i] != NULL && client_entry[i]->is_participant) {
+				
+				//logic to ckeck if any JOB_RESP is still pending 
+				if (client_entry[i]->is_exec) {
+					job_pend_counter++;
+				} else {
+					job_exec_start++;
+				}
+			}
+		}
+		
+		if (job_pend_counter == 0 && job_exec_start) {
+			//All jobs are completed, display output
+			DEBUG("%s", "All JOB RESP recvd from all clients");
+			display_job_output();
+			disp_cons_job = TRUE;
+		}
+
+		//check if timeout happend, display all recvd Job output
+		curr_time = time(NULL);
+		if ((job_sent_ts != 0) && (curr_time - job_sent_ts) > JOB_FIN_TIME) {
+			/* signal end of JOB */
+			DEBUG("%s", "Wait for JOB RESP timer expired.");
+			display_job_output();
+			disp_cons_job = TRUE;	
+		}
+	} // end of while 
+}
+
+void * send_thread (void *arg) 
+{
+
+	int i = 0, rc = 0;
+	int job_id = 0;
+		
+	arg = NULL;	
+	DEBUG("%s: %s", FUNC, "entered, waiting for ENTER key event");
+
+	/* wait for user to confirm if all clients are done */
+	while (TRUE) {
+		if (getchar() == '\n') {
+			DEBUG("%s", "User pressed Enter, continue to send_thread");
+			break;
+		}
+	}
+
+	while (TRUE) {
+	
+		for (i = 0; i < MAX_CLIENTS; i++) {
+			/* 
+			 * If any client's server_ack is pending, then server must 
+			 * first send an ack to server, informing client abt 
+			 * the group  and hash_id the client has been associated to
+			 */
+			if (client_entry[i] != NULL && client_entry[i]->is_active) {
+
+				if (client_entry[i]->server_ack == FALSE) {
+					
+					rc = send_pkt_to_client(client_entry[i]->socket_id, 
+											ACK_FRM_SERVER, i, NULL);
+					if (RC_NOTOK(rc)) {
+						/* move fwd with other clients */
+						continue;
+					}
+				}
+			} // client_entry null chk
+		} //for loop end
+
+		/* trigger start of Hbeat chk */
+		hbeat_chk_start = TRUE;
+
+		/* Display Available Jobs which can be executed */ 
+		if (disp_cons_job) {
+			display_job_info (&job_id);
+	
+			rc = send_job_to_grp(job_id);
+			if (RC_NOTOK(rc)) {
+				ERROR("Job_id: %d %s", "sending failed to grp");
+			} else {
+				job_sent_ts = time(NULL);
+				disp_cons_job = FALSE;
+			}
+		}
+	}
+	return NULL;
+}
+
+void * recv_thread (void *arg) 
+{
+
+	int rc = 0, i = 0;
+	int msg_data_len = 0;
+	msg_st *msg = NULL;
+
+	arg = NULL;
+
+	while (TRUE) {
+
+		rc = poll(readfds, total_fd, 1000);
+		if (RC_NOTOK(rc)) {
+			ERROR("%s %s", "poll() failed. errno:", strerror(errno));
+			continue;
+		} else if (rc == 0) {
+			continue;
+		}
+
+		/* Poll returned something valid, chk what */
+		for (i = 0; i < MAX_CLIENTS; i++) {
+
+			if(client_entry[i] != NULL && 
+					client_entry[i]->is_active) {
+
+				if (readfds[i].revents & POLLIN) {
+					DEBUG("Socket_id: %d of Client Id: %d is set", 
+						 readfds[i].fd,
+						 client_entry[i]->hash_id);
+					msg_data_len = get_msg_data_len(client_entry[i]->socket_id);
+					if (RC_NOTOK(msg_data_len)) {
+						continue;
+					}
+
+					msg = (msg_st *)calloc(1, sizeof(msg_st)+msg_data_len);
+					if (!msg) {
+						ERROR("%s id: %d", 
+							 "alloc failure while recv pkt frm client",
+							  client_entry[i]->hash_id);
+						continue;
+					}
+					rc = recv(client_entry[i]->socket_id, msg, 
+							sizeof(msg_st)+msg_data_len, 0);
+					if (RC_NOTOK(rc)) {
+						ERROR("%s %d (%s)", 
+								"pkt failed to be recvieved frm client id:",
+								client_entry[i]->hash_id,
+								inet_ntoa(client_entry[i]->addr));
+						free_msg(msg);
+						continue;
+					} else {
+						/* pkt recv success */
+						rc = server_action_on_msg(client_entry[i]->socket_id, 
+												  i, msg);
+						if (RC_NOTOK(rc)) {
+							ERROR("%s: %s", FUNC, "failed");
+						}
+						free_msg(msg);
+					}
+				} // end of revents event chk
+			} // end of client_entry null chk
+		} //end of for loop
+	}	//while end
+	
+	return NULL;
+}
+
+bool is_client_entry_exists(struct sockaddr_in *addr, int *index) {
+
+	for (int i = 0; i < MAX_CLIENTS; i++) {
+		if (client_entry[i] == NULL) {
+			continue;
+		}
+
+		if ((client_entry[i]->family == addr->sin_family) && 
+			!memcmp(&(client_entry[i]->addr), &(addr->sin_addr), 
+									sizeof(struct in_addr)) &&
+			(client_entry[i]->is_active == FALSE)) {
+			*index = i;
+			return TRUE;
+		}
+	}
+	return FALSE;
 }
 
 int get_msg_data_len (int socket_id)
@@ -664,9 +1642,28 @@ int get_msg_data_len (int socket_id)
 	return dummy_msg.len;
 }
 
+int get_msg_data_len_non_wait (int socket_id)
+{
+	int rc = 0;
+	msg_st dummy_msg;
+
+	memset(&dummy_msg, 0 , sizeof(&dummy_msg));
+	rc = recv(socket_id, &dummy_msg, 
+			 MAX_BROADCAST_PKT_LEN, MSG_PEEK | MSG_DONTWAIT);
+	if (RC_NOTOK(rc)) {
+		if (errno != EAGAIN) {
+			ERROR("%s: %s %s", FUNC, "dummy_msg recv() failed. errno. ",
+							strerror(errno));
+			return -1;
+		}
+		return -1;
+	}
+
+	return dummy_msg.len;
+}
 void disp_client_help_msg(void) {
 
- 	fprintf(stdout, "   usage: server [-h] [-d] [-a servr_addr] [-p portnum]\n");
+ 	fprintf(stdout, "   usage: client [-h] [-d] [-a servr_addr] [-p portnum]\n");
 	fprintf(stdout, "\toption h:  help on usage\n");
 	fprintf(stdout, "\toption d:  enable debug messages\n");
 	fprintf(stdout, "\toption p:  to override default port number\n");

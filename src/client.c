@@ -237,6 +237,7 @@ int main(int argc, char *argv[])
 		if (RC_NOTOK(rc)) {
 			ERROR("%s %s", "action_on_client_state() failed for", 
 								get_client_state_str(client_state));
+			DIE_ON_PIPE(errno);
 		}
 	}
 
