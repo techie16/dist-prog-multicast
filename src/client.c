@@ -216,16 +216,13 @@ int main(int argc, char *argv[])
 	}
 
 	/* 
-	 * Now copy server address and comm_port to global copy vars.
+	 * Now copy server address and comm_socket to global copy vars.
 	 * These will be used to send EXIT signals to server for 
 	 * cleanup
   	 */
-	//server_addr.sin_port = htons(comm_port);
 	memset(&server_addr_copy, 0, sizeof(server_addr_copy));
 	memcpy(&server_addr_copy, &server_addr, sizeof(server_addr_copy));
-	comm_port_copy = comm_port;
-	comm_sock_copy = comm_socket;
-	group_id_copy = group_id;
+	comm_sock_copy = comm_socket;	
 
 	/* Register signal events */
 	set_signal_handler(cleanExit_client);

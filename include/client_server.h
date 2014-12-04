@@ -11,6 +11,7 @@
 #define SERVERPORT 3690
 #define ERR_CODE (-1)
 #define RC_NOTOK(rc) (rc == ERR_CODE)
+#define RC_ISOK(rc)  (rc != ERR_CODE)
 #define CHK_ALLOC(msg) if(!msg) { return ERR_CODE; }
 #define FALSE 0
 #define TRUE  1
@@ -55,6 +56,7 @@ typedef enum {
 	HEARTBEAT,
 	JOB_REQ,
 	JOB_RESP,
+	JOB_TERM,
     CLIENT_DOWN,
     MAX_MSG_TYPE
 } msg_type_en;
@@ -68,19 +70,6 @@ typedef enum {
 	CLIENT_EXIT,
 	CLIENT_MAX_STATE
 } client_state_en;
-
-typedef enum {
-	SERVER_RES,
-	SERVER_INIT,
-	SERVER_BROADCAST_SENT,
-	SERVER_REG_WAIT,
-	SERVER_REG_RECV,
-	SERVER_ACK_SENT,
-	SERVER_HBEAT_WAIT,
-	SERVER_EXIT_RECV,
-	SERVER_CLIENT_DOWN,
-	SERVER_MAX_STATE
-} server_state_en;
 
 typedef struct client_db_ {
 	int socket_id;
@@ -113,11 +102,16 @@ typedef struct msg_st_ {
 	job_st job_data[0];
 } msg_st;
 
-typedef struct thread_arg_st_ {
+typedef struct clnt_thread_arg_st_ {
+	int client_id;
 	int socket_id;
-	server_state_en state_arg;
-	struct sockaddr_in addr;
-} thread_arg_st;
+	short group_id;
+	short job_id;
+	int start_range;
+	int end_range;
+	char outpt_file[FILE_NAME_LEN];
+	char inpt_file[FILE_NAME_LEN];
+} clnt_thread_arg_st;
 
 typedef struct client_recv_ {
 	client_db_st *entry;
@@ -133,14 +127,10 @@ extern int debug_on;
 extern client_db_st *client_entry[MAX_CLIENTS];
 extern grp_data_st  *grp_data[MAX_CLIENTS];
 extern client_state_en client_state;
-extern server_state_en server_state;
-extern struct sockaddr_in server_addr_copy;
-extern int comm_port_copy;
-extern int comm_sock_copy;
-extern int group_id_copy;
-extern int hash_id_copy;
 extern int total_fd;
 extern bool hbeat_chk_start;
+extern struct sockaddr_in server_addr_copy;
+extern int comm_sock_copy;
 
 void print_out(const char* format, ...);
 void print_debug(const char* format, ...);
@@ -158,15 +148,11 @@ void display_job_info (int *job_id);
 char * 
 sigtostr(int signum);
 
-void * 
-process_via_thread (void *arg);
-
-void * 
-process_data_thread (void *arg);
-
 void * send_thread (void *arg);
 
 void * recv_thread (void *arg);
+
+void * exec_job_thread (void *arg);
 
 int get_msg_data_len (int socket_id);
 
@@ -200,14 +186,8 @@ void disp_server_help_msg(void);
 
 char * get_client_state_str(client_state_en client_state_arg);
 
-char * get_server_state_str(server_state_en server_state_arg);
-
 bool is_client_entry_exists(struct sockaddr_in *addr, 
 							int *index);
-
-int action_on_server_state(int socket_fd, 
-						   server_state_en server_state_arg,
-                  		   struct sockaddr_in *addr);
 
 int action_on_client_state(int socket_fd, 
 						   client_state_en client_state_arg,	 
@@ -222,7 +202,7 @@ void set_signal_handler(void (*f)(int));
 
 void * verify_client_hbeat (void *arg);
 
-int compute_job(job_st *data, char *file);
+int compute_job(clnt_thread_arg_st *data);
 
 inline bool is_prime (int num);
 

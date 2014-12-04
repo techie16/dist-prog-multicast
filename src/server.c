@@ -37,7 +37,7 @@ int main(int argc, char **argv)
 	int reuse_sock = 1;
 	int addr_len = 0;
 	int index = 0;
-	int rc = 0, msg_data_len = 0;
+	int rc = 0;
 	pthread_t send_t;
 	pthread_t recv_t;
 	pthread_t verify_thread;
@@ -146,7 +146,7 @@ int main(int argc, char **argv)
         ERROR("%s errno: %s", "sending BROADCAST message failed.", strerror(errno));
 		free_msg(msg);
     } else {
-		PRINT("%s %s", "Server Up Broadcast msg sent to:", 
+		PRINT("%s %s", "Server Up.. Broadcast msg sent to subnet:", 
 							inet_ntoa(broadcast_addr.sin_addr));
 		free_msg(msg);
 	}
@@ -238,9 +238,11 @@ int main(int argc, char **argv)
 			ERROR("%s %s", "accept failed. errno. ", 
 							strerror(errno));
 		} else {
+
 			DEBUG("%s", "Server accept is succesfull");
+
 			/* This would be a client registration request */
-			msg = calloc(1, sizeof(msg_st)+ msg_data_len);
+			msg = calloc(1, sizeof(msg_st));
 			if (!msg) {
 				ERROR("%s: %s %d", FUNC, "msg alloc failure at line", 
 								 __LINE__);
@@ -276,7 +278,6 @@ int main(int argc, char **argv)
             DEBUG("%s %s %s", get_msg_type_str(msg->type),
                            "recieved from client: ", 
 							inet_ntoa(client_addr.sin_addr)); 
-			server_state = SERVER_REG_RECV;
 
 			/* Save the recvd details to client_db */
 			add_client_db_info(i, child_socket, msg->group_id, &client_addr);
