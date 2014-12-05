@@ -313,17 +313,17 @@ int send_pkt_to_client (int socket_id, msg_type_en msg_type,
 void display_job_info (int *job_id) {
 	
 	int i = 0;
-	printf("\n################################################\n");	
+	printf("\n#########################################################\n");	
 	while (TRUE) {
 		fprintf(stdout, "Job 1: calculate Prime numbers\n");
-		fprintf(stdout, "Job 2: calculate max in set of nos.\n");
-		fprintf(stdout, "Job 3: calculate work counts in File\n");
+		fprintf(stdout, "Job 2: calculate word counts in File\n");
+		fprintf(stdout, "Job 3: calculate max in set of nos.\n");
 		fprintf(stdout, "Job 4: calculate Sum of series\n");
 		fprintf(stdout, "Select Job Id to process...");
 	
 		scanf("%d", job_id);
 		printf("You selected: %d\n", *job_id);
-		printf("################################################\n");	
+		printf("#########################################################\n");	
 		if (*job_id < (JOB_RES+1)  && (*job_id >= JOB_MAX_ID)) {
 			printf("Input must be from Displayed Job_IDs.. Try again\n");
 			continue;
@@ -332,14 +332,14 @@ void display_job_info (int *job_id) {
 		}
 	}
 	printf("Below are the available clients to help in the Job\n");
-	printf("===================================================\n");
+	printf("=========================================================\n");
 
 	for (i = 0; i < MAX_CLIENTS; i++) {
 		if (grp_data[i] != NULL) {
 			display_grp_info(i);
 		}
 	}
-	printf("===================================================\n");
+	printf("=========================================================\n");
 }
 
 int send_job_to_grp(job_id_en job_id) {
@@ -355,6 +355,7 @@ int send_job_to_grp(job_id_en job_id) {
 	bool send_grp_fail = FALSE;
 	job_st *job_det = NULL;
 	grp_data_st *temp = NULL;
+	char input_file[FILE_NAME_LEN];
 	
 	total_grp = count_total_grp();
 
@@ -397,9 +398,8 @@ int send_job_to_grp(job_id_en job_id) {
 												JOB_REQ, temp->hash_id, 
 												job_det);
 						if (RC_NOTOK(rc)) {
-							ERROR("%s hash_id: %d", 
-								  "couldnt send job pkt to client with", 
-								  temp->hash_id);
+							ERROR("%s client_id: %d",
+								  "couldnt send job pkt to", temp->hash_id);
 							start_sub_num = start_sub_num;
 							factor_inc = set_per_grp;
 						} else {
@@ -437,12 +437,56 @@ int send_job_to_grp(job_id_en job_id) {
 			break;
 
 		case JOB_WC:
+			for (i = 0; i < MAX_CLIENTS; i++) {
+				if (grp_data[i] != NULL) {
+					temp = grp_data[i];
+					while (temp != NULL) {
+						/* set job details */
+						job_det->job_id = job_id;
+						snprintf(input_file, FILE_NAME_LEN, "job_2_%d", 
+								 temp->hash_id);
+
+						if(!is_file_exist(input_file)) {
+							ERROR("File: %s doesn't exist, skipping..", 
+								  input_file);
+							temp = temp->next;
+							continue;
+						}
+						memset(job_det->inpt_file, 0, FILE_NAME_LEN);
+						strcpy(job_det->inpt_file, input_file);
+						
+						/* fetch socket_id where the pkt will be sent */
+						socket_id = client_entry[temp->hash_id]->socket_id;
+						rc = send_pkt_to_client(socket_id,
+												JOB_REQ, temp->hash_id,
+												job_det);
+						if (RC_NOTOK(rc)) {
+							ERROR("%s client_id: %d", 
+								  "couldnt send job pkt to", temp->hash_id);
+						} else {
+
+		                    client_entry[temp->hash_id]->is_exec = TRUE;
+		                    client_entry[temp->hash_id]->is_participant = TRUE;
+							client_entry[temp->hash_id]->server_ack = TRUE;
+
+							PRINT("JOB_REQ to calc WordCount in file :%s %s%d", 
+							      input_file, "sent to client_id: ", 
+								  temp->hash_id);
+						}
+						
+						/* move to next ptr */
+						temp = temp->next;
+					}	
+
+					/* move to next grp */
+				}
+			}
+			break;
+
+		case JOB_FIND_MAX:
 			break;
 
 		case JOB_SERIES:
-			break;
-		
-		case JOB_FIND_MAX:
 			break;
 		
 		default:
@@ -689,12 +733,27 @@ int del_file_if_exist(char *file)
 	return 0;
 }
 
+bool is_file_exist(char *file) 
+{
+	
+	if (!file) {
+		return FALSE;
+	}
+
+	if (!access(file, F_OK)) {
+			return TRUE;
+	}
+
+	return FALSE;
+}
+
 int compute_job(clnt_thread_arg_st *data)
 {
 
 	int start_num = 0, end_num = 0, i = 0;
 	FILE *fp = NULL;
 	char ascii_num[MAX_ASC_CHLEN];
+	char ascii_word[MAX_WORD_LEN];
 
 	if (!data) {
 		ERROR("%s: %s", FUNC, "data is NULL, exiting");
@@ -732,6 +791,31 @@ int compute_job(clnt_thread_arg_st *data)
 			break;
 
 		case JOB_WC:
+			fp = fopen(data->inpt_file, "r");
+			if (!fp) {
+				ERROR("%s: %s", FUNC, "fp for filename is NULL, exiting");
+				return ERR_CODE;
+			}
+
+			i = 0;
+			while (fscanf(fp, "%s", ascii_word) != EOF) {	
+				i++;
+			}
+		   
+			fclose(fp);
+
+			/* Write the o/p to file */
+			(void) del_file_if_exist(data->outpt_file);
+			fp = fopen(data->outpt_file, "a+");	
+			if (!fp) {
+				ERROR("%s: %s", FUNC, "fp for filename is NULL, exiting");
+				return ERR_CODE;
+			}
+
+			DEBUG("word count in file: %s is %d", data->inpt_file, i);
+			snprintf(ascii_word, MAX_WORD_LEN, "%d", i);
+			fputs(ascii_word, fp);
+			fclose(fp);
 			break;
 
 		case JOB_SERIES:
@@ -804,7 +888,7 @@ int action_on_client_state(int socket_fd,
 					   strerror(errno));
 				return ERR_CODE;
 			} else {
-				DEBUG("%s %s for group_id: %d", 
+				PRINT("%s %s for group_id: %d", 
 						"Registartion msg sent to server: ", 
 						inet_ntoa(addr->sin_addr), msg->group_id);
 				client_state = CLIENT_REG_SENT;
@@ -830,7 +914,7 @@ int action_on_client_state(int socket_fd,
 							       strerror(errno));
 					return ERR_CODE;
                 } else {
-					PRINT("%s %s hash_id: %d grp_id: %d", 
+					PRINT("%s %s my client_id: %d and grp_id: %d", 
 								get_msg_type_str(msg->type),
 								"recieved from server", msg->hash_id, 
                                 msg->group_id);
@@ -918,7 +1002,7 @@ int action_on_client_state(int socket_fd,
 						
 						job_id = msg->job_data->job_id; 
 
-						DEBUG("%s %d (from_num: %d to_num: %d)",
+						PRINT("%s %d (from_num: %d to_num: %d)",
 							  "Recvd JOB_REQ. job_id:", 
 							  job_id, msg->job_data->start_range, 
 							  msg->job_data->end_range);
@@ -928,7 +1012,6 @@ int action_on_client_state(int socket_fd,
 						DEBUG("%s %s", "output file will be:", outp_file);
 	
 						arg.client_id = msg->hash_id;
-						arg.socket_id = socket_fd;
 						arg.group_id = msg->group_id;
 						arg.job_id = msg->job_data->job_id;
 						arg.start_range = msg->job_data->start_range;
@@ -954,7 +1037,7 @@ int action_on_client_state(int socket_fd,
 						}
 						free_msg(msg);
 					} else if (msg->type == JOB_TERM) {
-						DEBUG("%s %s", "Recvd Job Termination request", 
+						PRINT("%s %s", "Recvd Job Termination request", 
 							 "from server due to timeout");
 						//cancel the execution thread
 						rc = pthread_cancel(job_thread);
@@ -985,7 +1068,7 @@ int action_on_client_state(int socket_fd,
 					   strerror(errno));
 				return ERR_CODE;
 			} else {
-				DEBUG("%s %s for group_id: %d", 
+				PRINT("%s %s for group_id: %d", 
 						"CLIENT_DOWN msg sent to server: ", 
 						inet_ntoa(addr->sin_addr), msg->group_id);
 				client_state = CLIENT_EXIT;
@@ -1103,7 +1186,7 @@ int count_total_grp (void) {
 	return counter;
 }
 
-int display_grp_info (short grp_id) 
+void display_grp_info (short grp_id) 
 {
 
 	grp_data_st *temp = NULL;
@@ -1118,8 +1201,7 @@ int display_grp_info (short grp_id)
 	}
 
 	printf("\nTotal: %d\n", counter);
-	printf("--------------------------------------------------------\n");
-	return counter;
+	printf("=========================================================\n");
 }
 
 int count_grp_total (short grp_id) 
@@ -1359,7 +1441,8 @@ void * exec_job_thread (void *arg)
 		msg->job_data->job_id = thread_arg->job_id;
 		strcpy(msg->job_data->outpt_file, thread_arg->outpt_file);
 
-		//numbytes = send(thread_arg->socket_id, msg, msg->len, 0);
+		numbytes = send(comm_sock_copy, msg, 
+						sizeof(msg_st)+sizeof(job_st), 0);
 		if (RC_NOTOK(numbytes)) {
 			ERROR("%s %d %s errno: %s", 
 				  "Job_RESP for job_id:", thread_arg->job_id,

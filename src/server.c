@@ -275,7 +275,7 @@ int main(int argc, char **argv)
 
 		if (num_connection <= MAX_CLIENTS) {
 
-            DEBUG("%s %s %s", get_msg_type_str(msg->type),
+            PRINT("%s %s %s", get_msg_type_str(msg->type),
                            "recieved from client: ", 
 							inet_ntoa(client_addr.sin_addr)); 
 

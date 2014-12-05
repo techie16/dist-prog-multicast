@@ -23,6 +23,7 @@
 #define MAX_FILE_LEN 1024
 #define ADDR_STR_LEN 20
 #define FILE_NAME_LEN 20
+#define MAX_WORD_LEN 20
 #define PRINT(format, ...) print_out(format, __VA_ARGS__) 
 #define DEBUG(format, ...) print_debug(format, __VA_ARGS__) 
 #define ERROR(format, ...) print_error(format, __VA_ARGS__)
@@ -43,8 +44,8 @@ typedef enum {
 	JOB_RES,
 	JOB_PRIME,
 	JOB_WC,
-	JOB_SERIES,
 	JOB_FIND_MAX,
+	JOB_SERIES,
 	JOB_MAX_ID
 } job_id_en;
 
@@ -90,8 +91,8 @@ typedef struct job_st_ {
 	short job_id;
 	int start_range;
 	int end_range;
-	char outpt_file[FILE_NAME_LEN];
 	char inpt_file[FILE_NAME_LEN];
+	char outpt_file[FILE_NAME_LEN];
 } job_st;
 
 typedef struct msg_st_ {
@@ -104,7 +105,6 @@ typedef struct msg_st_ {
 
 typedef struct clnt_thread_arg_st_ {
 	int client_id;
-	int socket_id;
 	short group_id;
 	short job_id;
 	int start_range;
@@ -160,7 +160,7 @@ int get_msg_data_len_non_wait (int socket_id);
 
 bool get_send_flag_for_state (bool flag);
 
-int display_grp_info (short grp_id);
+void display_grp_info (short grp_id);
 
 /* Function to convert mst tyoe to string */
 char * get_msg_type_str (msg_type_en msg_type);
@@ -211,5 +211,7 @@ int del_file_if_exist(char *file);
 void display_job_output(void);
 
 int count_grp_total (short grp_id);
+
+bool is_file_exist(char *file);
 
 #endif
