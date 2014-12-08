@@ -18,13 +18,15 @@
 #include <getopt.h>
 #include <pthread.h>
 #include <time.h>
+#include <ncurses.h>
 #include <sys/poll.h>
 #include "client_server.h"
 
 extern struct pollfd readfds[MAX_CLIENTS];
 
-int main(int argc, char **argv) 
-{
+int main(int argc, char *argv[])
+{	
+
 	int broadcast_fd = 0;
 	int master_socket = 0, child_socket = 0;
 	int comm_port = 0, port_num = 0;

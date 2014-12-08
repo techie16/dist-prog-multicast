@@ -1047,6 +1047,7 @@ int action_on_client_state(int socket_fd,
 						free_msg(msg);
 					} else {
 						DEBUG("%s: %d", "msg type is diff", msg->type);
+						free_msg(msg);
 					}
 					client_state = CLIENT_ACK_OK;
 				}
@@ -1536,5 +1537,5 @@ void disp_server_help_msg(void) {
 	fprintf(stdout, "\toption h:  help on usage\n");
 	fprintf(stdout, "\toption d:  enable debug messages\n");
 	fprintf(stdout, "\toption p:  to override default port number\n");
-	fprintf(stdout, "\toption b:  choose subnet where to braodcast\n");
+	fprintf(stdout, "\toption b:  choose subnet where to broadcast\n");
 }

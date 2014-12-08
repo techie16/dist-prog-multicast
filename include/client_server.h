@@ -73,18 +73,18 @@ typedef enum {
 } client_state_en;
 
 typedef struct client_db_ {
-	int socket_id;
-	short group_id;
-	short hash_id;
-	short family;
-	unsigned short port_num;
-	struct in_addr addr;
-	bool is_active;
-	bool is_exec;
-	bool server_ack;
-	bool is_participant;
-	time_t hbeat_time;
-	char file_outp[FILE_NAME_LEN];
+	int socket_id; 			 //Socket_fd to be used for send to clnt
+	short group_id;			 // group to which client belongs
+	short hash_id;			 // unique client id
+	short family;            // address family
+	unsigned short port_num; // port number to which client is cnnected
+	struct in_addr addr;	 // addr struct of client
+	bool is_active;			 // flag TRUE if client is active
+	bool is_exec;			 // flag TRUE if clnt is exec any job
+	bool server_ack;		 // flag FALSE if serevr is yet to send an ACK 
+	bool is_participant;	 // flag TRUE if clnt is participating in any job
+	time_t hbeat_time;		 // time stamp updated each time a HBEAT is recvd
+	char file_outp[FILE_NAME_LEN]; 
 } client_db_st;
 
 typedef struct job_st_ {
