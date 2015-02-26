@@ -1,0 +1,205 @@
+!_TAG_FILE_FORMAT	2	/extended format; --format=1 will not append ;" to lines/
+!_TAG_FILE_SORTED	1	/0=unsorted, 1=sorted, 2=foldcase/
+!_TAG_PROGRAM_AUTHOR	Darren Hiebert	/dhiebert@users.sourceforge.net/
+!_TAG_PROGRAM_NAME	Exuberant Ctags	//
+!_TAG_PROGRAM_URL	http://ctags.sourceforge.net	/official site/
+!_TAG_PROGRAM_VERSION	5.6	//
+ACK_FRM_SERVER	include/client_server.h	/^    ACK_FRM_SERVER,$/;"	e	enum:__anon3
+ADDR_FAMILY	include/client_server.h	21;"	d
+ADDR_STR_LEN	include/client_server.h	24;"	d
+ALERT	include/client_server.h	30;"	d
+ANALYSIS_MCAST_GRP	include/client_server.h	44;"	d
+ANALYSIS_MCAST_PORT	include/client_server.h	46;"	d
+CC	src/Makefile	/^CC=gcc$/;"	m
+CFLAGS	src/Makefile	/^CFLAGS=-I $(IDIR) $/;"	m
+CHK_ALLOC	include/client_server.h	15;"	d
+CLIENT_ACK_OK	include/client_server.h	/^	CLIENT_ACK_OK,$/;"	e	enum:__anon4
+CLIENT_ACK_WAIT	include/client_server.h	/^	CLIENT_ACK_WAIT,$/;"	e	enum:__anon4
+CLIENT_DOWN	include/client_server.h	/^    CLIENT_DOWN,$/;"	e	enum:__anon3
+CLIENT_EXIT	include/client_server.h	/^	CLIENT_EXIT,$/;"	e	enum:__anon4
+CLIENT_INIT	include/client_server.h	/^	CLIENT_INIT,$/;"	e	enum:__anon4
+CLIENT_MAX_STATE	include/client_server.h	/^	CLIENT_MAX_STATE$/;"	e	enum:__anon4
+CLIENT_REG_SENT	include/client_server.h	/^	CLIENT_REG_SENT,$/;"	e	enum:__anon4
+CLIENT_RES	include/client_server.h	/^	CLIENT_RES,$/;"	e	enum:__anon4
+CLI_OBJ	src/Makefile	/^CLI_OBJ = $(patsubst %,$(ODIR)\/%,$(_CLI_OBJ))$/;"	m
+COMMON_HDR	include/client_server.h	8;"	d
+COMPUTE_MCAST_GRP	include/client_server.h	43;"	d
+COMP_MCAST_PORT	include/client_server.h	45;"	d
+DEBUG	include/client_server.h	28;"	d
+DEBUG_ON	include/client_server.h	48;"	d
+DEPS	src/Makefile	/^DEPS = $(patsubst %,$(IDIR)\/%,$(_DEPS))$/;"	m
+DIE_ON_PIPE	include/client_server.h	41;"	d
+ERROR	include/client_server.h	29;"	d
+ERR_CODE	include/client_server.h	12;"	d
+EXIT	include/client_server.h	31;"	d
+FALSE	include/client_server.h	16;"	d
+FILE_NAME_LEN	include/client_server.h	25;"	d
+FUNC	include/client_server.h	32;"	d
+HBT_CHK_ITR	include/client_server.h	36;"	d
+HBT_EXPTIME	include/client_server.h	34;"	d
+HBT_TIME	include/client_server.h	33;"	d
+HEARTBEAT	include/client_server.h	/^	HEARTBEAT,$/;"	e	enum:__anon3
+IDIR	src/Makefile	/^IDIR =..\/include$/;"	m
+IGNORE_GROUP	include/client_server.h	37;"	d
+JOB_ANALYSIS	include/client_server.h	/^	JOB_ANALYSIS = 2,$/;"	e	enum:__anon1
+JOB_COMPUTE	include/client_server.h	/^	JOB_COMPUTE  =  1,$/;"	e	enum:__anon1
+JOB_FIND_MAX	include/client_server.h	/^	JOB_FIND_MAX,$/;"	e	enum:__anon2
+JOB_FIN_TIME	include/client_server.h	35;"	d
+JOB_MAX	include/client_server.h	/^	JOB_MAX$/;"	e	enum:__anon1
+JOB_MAX_ID	include/client_server.h	/^	JOB_MAX_ID$/;"	e	enum:__anon2
+JOB_PRIME	include/client_server.h	/^	JOB_PRIME,$/;"	e	enum:__anon2
+JOB_REQ	include/client_server.h	/^	JOB_REQ,$/;"	e	enum:__anon3
+JOB_RES	include/client_server.h	/^	JOB_RES,$/;"	e	enum:__anon2
+JOB_RESP	include/client_server.h	/^	JOB_RESP,$/;"	e	enum:__anon3
+JOB_SERIES	include/client_server.h	/^	JOB_SERIES,$/;"	e	enum:__anon2
+JOB_SERVER_LIST	include/client_server.h	/^	JOB_SERVER_LIST = 3,$/;"	e	enum:__anon1
+JOB_TERM	include/client_server.h	/^	JOB_TERM,$/;"	e	enum:__anon3
+JOB_WAIT_TIME	include/client_server.h	38;"	d
+JOB_WC	include/client_server.h	/^	JOB_WC,$/;"	e	enum:__anon2
+LDIR	src/Makefile	/^LDIR =..\/lib$/;"	m
+MAX_ASC_CHLEN	include/client_server.h	40;"	d
+MAX_BROADCAST_PKT_LEN	include/client_server.h	20;"	d
+MAX_CLIENTS	include/client_server.h	22;"	d
+MAX_FILE_LEN	include/client_server.h	23;"	d
+MAX_MSG_STR_LEN	include/client_server.h	18;"	d
+MAX_MSG_TYPE	include/client_server.h	/^    MAX_MSG_TYPE$/;"	e	enum:__anon3
+MAX_WORD_LEN	include/client_server.h	26;"	d
+MSG_RES	include/client_server.h	/^    MSG_RES,$/;"	e	enum:__anon3
+MULTICAST_ON	include/client_server.h	49;"	d
+ODIR	src/Makefile	/^ODIR =..\/obj$/;"	m
+PRINT	include/client_server.h	27;"	d
+RC_ISOK	include/client_server.h	14;"	d
+RC_NOTOK	include/client_server.h	13;"	d
+REGISTER_CLIENT	include/client_server.h	/^    REGISTER_CLIENT,$/;"	e	enum:__anon3
+SECS_IN_MSEC	include/client_server.h	39;"	d
+SERVERPORT	include/client_server.h	11;"	d
+SERVER_UP	include/client_server.h	/^    SERVER_UP,$/;"	e	enum:__anon3
+SER_OBJ	src/Makefile	/^SER_OBJ = $(patsubst %,$(ODIR)\/%,$(_SER_OBJ))$/;"	m
+SIZEOFINT	include/client_server.h	19;"	d
+TRUE	include/client_server.h	17;"	d
+_CLI_OBJ	src/Makefile	/^_CLI_OBJ = client.o client_server.o $/;"	m
+_DEPS	src/Makefile	/^_DEPS = client_server.h$/;"	m
+_SER_OBJ	src/Makefile	/^_SER_OBJ = server.o client_server.o$/;"	m
+action_on_client_state	src/client_server.c	/^int action_on_client_state(int socket_fd, $/;"	f
+add_client_db_info	src/client_server.c	/^void add_client_db_info(int index, int socket_fd,$/;"	f
+add_hash_id_to_grp	src/client_server.c	/^int add_hash_id_to_grp (short hash_id, short grp_id, $/;"	f
+addr	include/client_server.h	/^	struct in_addr addr;	 \/\/ addr struct of client$/;"	m	struct:client_db_	typeref:struct:client_db_::in_addr
+cleanExit	src/client_server.c	/^void cleanExit(int signum)$/;"	f
+cleanExit_client	src/client_server.c	/^void cleanExit_client(int signum)$/;"	f
+client_db_	include/client_server.h	/^typedef struct client_db_ {$/;"	s
+client_db_st	include/client_server.h	/^} client_db_st;$/;"	t	typeref:struct:client_db_
+client_entry	src/client_server.c	/^client_db_st *client_entry[MAX_CLIENTS];$/;"	v
+client_id	include/client_server.h	/^	int client_id;$/;"	m	struct:clnt_thread_arg_st_
+client_recv_	include/client_server.h	/^typedef struct client_recv_ {$/;"	s
+client_recv_st	include/client_server.h	/^} client_recv_st;$/;"	t	typeref:struct:client_recv_
+client_state	src/client_server.c	/^client_state_en client_state = CLIENT_RES;$/;"	v
+client_state_en	include/client_server.h	/^} client_state_en;$/;"	t	typeref:enum:__anon4
+clnt_debug_on	src/client_server.c	/^bool clnt_debug_on = FALSE;$/;"	v
+clnt_mcast_addr	src/client_server.c	/^struct sockaddr_in clnt_mcast_addr;$/;"	v	typeref:struct:sockaddr_in
+clnt_mcast_fd	src/client_server.c	/^int  clnt_mcast_fd = 0;$/;"	v
+clnt_thread_arg_st	include/client_server.h	/^} clnt_thread_arg_st;$/;"	t	typeref:struct:clnt_thread_arg_st_
+clnt_thread_arg_st_	include/client_server.h	/^typedef struct clnt_thread_arg_st_ {$/;"	s
+comm_sock_copy	src/client_server.c	/^int comm_sock_copy = 0;$/;"	v
+compute_job	src/client_server.c	/^int compute_job(clnt_thread_arg_st *data)$/;"	f
+count_grp_total	src/client_server.c	/^int count_grp_total (short grp_id) $/;"	f
+count_total_grp	src/client_server.c	/^int count_total_grp (void) {$/;"	f
+del_file_if_exist	src/client_server.c	/^int del_file_if_exist(char *file) $/;"	f
+disp_client_help_msg	src/client_server.c	/^void disp_client_help_msg(void) $/;"	f
+disp_cons_job	src/client_server.c	/^bool disp_cons_job = TRUE;$/;"	v
+disp_server_help_msg	src/client_server.c	/^void disp_server_help_msg(void) $/;"	f
+display_grp_info	src/client_server.c	/^void display_grp_info (short grp_id) $/;"	f
+display_job_info	src/client_server.c	/^void display_job_info (int *job_id) {$/;"	f
+display_job_output	src/client_server.c	/^void display_job_output(void)$/;"	f
+end_range	include/client_server.h	/^	int end_range;$/;"	m	struct:clnt_thread_arg_st_
+end_range	include/client_server.h	/^	int end_range;$/;"	m	struct:job_st_
+entry	include/client_server.h	/^	client_db_st *entry;$/;"	m	struct:client_recv_
+exec_job_start	src/client_server.c	/^bool exec_job_start = FALSE;$/;"	v
+exec_job_thread	src/client_server.c	/^void * exec_job_thread (void *arg)$/;"	f
+family	include/client_server.h	/^	short family;            \/\/ address family$/;"	m	struct:client_db_
+file_outp	include/client_server.h	/^	char file_outp[FILE_NAME_LEN]; $/;"	m	struct:client_db_
+free_msg	src/client_server.c	/^void free_msg (msg_st *msg) $/;"	f
+get_client_state_str	src/client_server.c	/^char * get_client_state_str(client_state_en client_state_arg) $/;"	f
+get_msg_data_len	src/client_server.c	/^int get_msg_data_len (int socket_id)$/;"	f
+get_msg_data_len_non_wait	src/client_server.c	/^int get_msg_data_len_non_wait (int socket_id)$/;"	f
+get_msg_data_len_udp	src/client_server.c	/^int get_msg_data_len_udp (int socket_id)$/;"	f
+get_msg_type_str	src/client_server.c	/^char * get_msg_type_str (msg_type_en msg_type) $/;"	f
+get_server_addr	src/test_name.c	/^void get_server_addr(FILE *fp, char *buf) {$/;"	f
+get_server_info_frm_file	src/client_server.c	/^int get_server_info_frm_file (char *addr, int *port_num) $/;"	f
+get_server_port_frm_file	src/client_server.c	/^int get_server_port_frm_file (void) $/;"	f
+group_id	include/client_server.h	/^	short group_id;			 \/\/ group to which client belongs$/;"	m	struct:client_db_
+group_id	include/client_server.h	/^	short group_id;$/;"	m	struct:clnt_thread_arg_st_
+group_id	include/client_server.h	/^	short group_id;$/;"	m	struct:msg_st_
+grp_data	src/client_server.c	/^grp_data_st  *grp_data[MAX_CLIENTS];$/;"	v
+grp_data_	include/client_server.h	/^typedef struct grp_data_ {$/;"	s
+grp_data_st	include/client_server.h	/^} grp_data_st;$/;"	t	typeref:struct:grp_data_
+grp_id_en	include/client_server.h	/^} grp_id_en;$/;"	t	typeref:enum:__anon1
+hash_id	include/client_server.h	/^	short hash_id;			 \/\/ unique client id$/;"	m	struct:client_db_
+hash_id	include/client_server.h	/^	short hash_id;$/;"	m	struct:grp_data_
+hash_id	include/client_server.h	/^	short hash_id;$/;"	m	struct:msg_st_
+hbeat_chk_start	src/client_server.c	/^bool hbeat_chk_start = FALSE;$/;"	v
+hbeat_time	include/client_server.h	/^	time_t hbeat_time;		 \/\/ time stamp updated each time a HBEAT is recvd$/;"	m	struct:client_db_
+inpt_file	include/client_server.h	/^	char inpt_file[FILE_NAME_LEN];$/;"	m	struct:clnt_thread_arg_st_
+inpt_file	include/client_server.h	/^	char inpt_file[FILE_NAME_LEN];$/;"	m	struct:job_st_
+is_active	include/client_server.h	/^	bool is_active;			 \/\/ flag TRUE if client is active$/;"	m	struct:client_db_
+is_client_entry_exists	src/client_server.c	/^bool is_client_entry_exists(struct sockaddr_in *addr, int *index) $/;"	f
+is_debug_mode	src/client_server.c	/^bool is_debug_mode (void) $/;"	f
+is_exec	include/client_server.h	/^	bool is_exec;			 \/\/ flag TRUE if clnt is exec any job$/;"	m	struct:client_db_
+is_file_exist	src/client_server.c	/^bool is_file_exist(char *file) $/;"	f
+is_multicast	src/client_server.c	/^bool is_multicast (void) $/;"	f
+is_multicast_supp	src/client_server.c	/^bool is_multicast_supp = FALSE;$/;"	v
+is_participant	include/client_server.h	/^	bool is_participant;	 \/\/ flag TRUE if clnt is participating in any job$/;"	m	struct:client_db_
+is_prime	src/client_server.c	/^inline bool is_prime (int num)$/;"	f
+job_data	include/client_server.h	/^	job_st job_data[0];$/;"	m	struct:msg_st_
+job_id	include/client_server.h	/^	short job_id;$/;"	m	struct:clnt_thread_arg_st_
+job_id	include/client_server.h	/^	short job_id;$/;"	m	struct:job_st_
+job_id_en	include/client_server.h	/^} job_id_en;$/;"	t	typeref:enum:__anon2
+job_in_progress	src/client_server.c	/^bool job_in_progress = FALSE;$/;"	v
+job_sent_ts	src/client_server.c	/^time_t job_sent_ts = 0;$/;"	v
+job_st	include/client_server.h	/^} job_st;$/;"	t	typeref:struct:job_st_
+job_st_	include/client_server.h	/^typedef struct job_st_ {$/;"	s
+join_mcast_group	src/client_server.c	/^int join_mcast_group (grp_id_en group_id)$/;"	f
+leave_mcast_group	src/client_server.c	/^int leave_mcast_group (void)$/;"	f
+len	include/client_server.h	/^	int len;$/;"	m	struct:msg_st_
+log_fp	src/client_server.c	/^FILE *log_fp = NULL;$/;"	v
+main	src/client.c	/^int main(int argc, char *argv[])$/;"	f
+main	src/server.c	/^int main(int argc, char *argv[])$/;"	f
+main	src/test_name.c	/^int main(int argc, char **argv)$/;"	f
+mreq_global	src/client_server.c	/^struct ip_mreq mreq_global;$/;"	v	typeref:struct:ip_mreq
+msg_st	include/client_server.h	/^} msg_st;$/;"	t	typeref:struct:msg_st_
+msg_st_	include/client_server.h	/^typedef struct msg_st_ {$/;"	s
+msg_type_en	include/client_server.h	/^} msg_type_en;$/;"	t	typeref:enum:__anon3
+my_client_id	src/client_server.c	/^int my_client_id = 0;$/;"	v
+next	include/client_server.h	/^	struct grp_data_ *next;$/;"	m	struct:grp_data_	typeref:struct:grp_data_::grp_data_
+op_mode	src/client_server.c	/^int op_mode = 0;$/;"	v
+outpt_file	include/client_server.h	/^	char outpt_file[FILE_NAME_LEN];$/;"	m	struct:clnt_thread_arg_st_
+outpt_file	include/client_server.h	/^	char outpt_file[FILE_NAME_LEN];$/;"	m	struct:job_st_
+port_num	include/client_server.h	/^	unsigned short port_num; \/\/ port number to which client is cnnected$/;"	m	struct:client_db_
+print_alert	src/client_server.c	/^void print_alert(const char* format, ... ) $/;"	f
+print_debug	src/client_server.c	/^void print_debug(const char* format, ... ) $/;"	f
+print_error	src/client_server.c	/^void print_error(const char* format, ... ) $/;"	f
+print_out	src/client_server.c	/^void print_out(const char* format, ... )$/;"	f
+readfds	src/client_server.c	/^struct pollfd readfds[MAX_CLIENTS];$/;"	v	typeref:struct:pollfd
+recv_thread	src/client_server.c	/^void * recv_thread (void *arg) $/;"	f
+recvd_job_id	src/client_server.c	/^int recvd_job_id = 0;$/;"	v
+req_grp_id	src/client_server.c	/^int req_grp_id = 0;$/;"	v
+send_job_to_grp	src/client_server.c	/^int send_job_to_grp(job_id_en job_id) {$/;"	f
+send_job_to_grp_mcast	src/client_server.c	/^int send_job_to_grp_mcast (job_id_en job_id) {$/;"	f
+send_pkt_to_client	src/client_server.c	/^int send_pkt_to_client (int socket_id, msg_type_en msg_type,$/;"	f
+send_thread	src/client_server.c	/^void * send_thread (void *arg) $/;"	f
+server_ack	include/client_server.h	/^	bool server_ack;		 \/\/ flag FALSE if serevr is yet to send an ACK $/;"	m	struct:client_db_
+server_action_on_msg	src/client_server.c	/^int server_action_on_msg(int socket_id, int hash_id,$/;"	f
+server_addr_copy	src/client_server.c	/^struct sockaddr_in server_addr_copy;$/;"	v	typeref:struct:sockaddr_in
+server_join_mcast_group	src/client_server.c	/^int server_join_mcast_group (grp_id_en group_id, int sock_id)$/;"	f
+server_leave_mcast_group	src/client_server.c	/^int server_leave_mcast_group (grp_id_en group_id, int sock_id)$/;"	f
+set_signal_handler	src/client_server.c	/^void set_signal_handler(void (*f)(int)) $/;"	f
+sigtostr	src/client_server.c	/^char * sigtostr(int signum)$/;"	f
+socket_id	include/client_server.h	/^	int socket_id; 			 \/\/Socket_fd to be used for send to clnt$/;"	m	struct:client_db_
+srvr_master_sock	src/client_server.c	/^int srvr_master_sock = 0;$/;"	v
+start_range	include/client_server.h	/^	int start_range;$/;"	m	struct:clnt_thread_arg_st_
+start_range	include/client_server.h	/^	int start_range;$/;"	m	struct:job_st_
+str	src/test_name.c	/^char str[55];$/;"	v
+sub_job_count	src/client_server.c	/^int sub_job_count = 0;$/;"	v
+total_fd	src/client_server.c	/^int total_fd;$/;"	v
+type	include/client_server.h	/^	msg_type_en type; $/;"	m	struct:msg_st_
+upd_client_db_info	src/client_server.c	/^void upd_client_db_info(int index, int new_socket_fd, $/;"	f
+verify_client_hbeat	src/client_server.c	/^void * verify_client_hbeat (void *arg) $/;"	f

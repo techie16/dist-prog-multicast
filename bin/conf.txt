@@ -1,0 +1,2 @@
+server_addr=173.39.53.172
+server_port=3690

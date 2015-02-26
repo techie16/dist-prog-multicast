@@ -1,9 +1,9 @@
 CC=gcc
 IDIR =../include
 CFLAGS=-I $(IDIR) 
-CFLAGS += -std=c99 -Wall -Wextra -Werror \
+CFLAGS += -std=c99 -Wall -Wextra \
 	-Wstrict-prototypes -Wmissing-prototypes \
-	-Wshadow -Wfloat-equal -lpthread -lncurses
+	-Wshadow -Wfloat-equal -lpthread
 
 ODIR =../obj
 LDIR =../lib

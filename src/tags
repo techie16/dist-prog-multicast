@@ -1,0 +1,75 @@
+!_TAG_FILE_FORMAT	2	/extended format; --format=1 will not append ;" to lines/
+!_TAG_FILE_SORTED	1	/0=unsorted, 1=sorted, 2=foldcase/
+!_TAG_PROGRAM_AUTHOR	Darren Hiebert	/dhiebert@users.sourceforge.net/
+!_TAG_PROGRAM_NAME	Exuberant Ctags	//
+!_TAG_PROGRAM_URL	http://ctags.sourceforge.net	/official site/
+!_TAG_PROGRAM_VERSION	5.6	//
+CC	Makefile	/^CC=gcc$/;"	m
+CFLAGS	Makefile	/^CFLAGS=-I $(IDIR) $/;"	m
+CLI_OBJ	Makefile	/^CLI_OBJ = $(patsubst %,$(ODIR)\/%,$(_CLI_OBJ))$/;"	m
+DEPS	Makefile	/^DEPS = $(patsubst %,$(IDIR)\/%,$(_DEPS))$/;"	m
+IDIR	Makefile	/^IDIR =..\/include$/;"	m
+LDIR	Makefile	/^LDIR =..\/lib$/;"	m
+ODIR	Makefile	/^ODIR =..\/obj$/;"	m
+SER_OBJ	Makefile	/^SER_OBJ = $(patsubst %,$(ODIR)\/%,$(_SER_OBJ))$/;"	m
+_CLI_OBJ	Makefile	/^_CLI_OBJ = client.o client_server.o $/;"	m
+_DEPS	Makefile	/^_DEPS = client_server.h$/;"	m
+_SER_OBJ	Makefile	/^_SER_OBJ = server.o client_server.o$/;"	m
+action_on_client_state	client_server.c	/^int action_on_client_state(int socket_fd, $/;"	f
+add_client_db_info	client_server.c	/^void add_client_db_info(int index, int socket_fd,$/;"	f
+add_hash_id_to_grp	client_server.c	/^int add_hash_id_to_grp (short hash_id, short grp_id, $/;"	f
+cleanExit	client_server.c	/^void cleanExit(int signum)$/;"	f
+cleanExit_client	client_server.c	/^void cleanExit_client(int signum)$/;"	f
+client_entry	client_server.c	/^client_db_st *client_entry[MAX_CLIENTS];$/;"	v
+client_state	client_server.c	/^client_state_en client_state = CLIENT_RES;$/;"	v
+comm_sock_copy	client_server.c	/^int comm_sock_copy = 0;$/;"	v
+compute_job	client_server.c	/^int compute_job(clnt_thread_arg_st *data)$/;"	f
+count_grp_total	client_server.c	/^int count_grp_total (short grp_id) $/;"	f
+count_total_grp	client_server.c	/^int count_total_grp (void) {$/;"	f
+del_file_if_exist	client_server.c	/^int del_file_if_exist(char *file) $/;"	f
+disp_client_help_msg	client_server.c	/^void disp_client_help_msg(void) {$/;"	f
+disp_cons_job	client_server.c	/^bool disp_cons_job = TRUE;$/;"	v
+disp_server_help_msg	client_server.c	/^void disp_server_help_msg(void) {$/;"	f
+display_grp_info	client_server.c	/^void display_grp_info (short grp_id) $/;"	f
+display_job_info	client_server.c	/^void display_job_info (int *job_id) {$/;"	f
+display_job_output	client_server.c	/^void display_job_output(void)$/;"	f
+exec_job_thread	client_server.c	/^void * exec_job_thread (void *arg)$/;"	f
+free_msg	client_server.c	/^void free_msg (msg_st *msg) $/;"	f
+get_client_state_str	client_server.c	/^char * get_client_state_str(client_state_en client_state_arg) $/;"	f
+get_msg_data_len	client_server.c	/^int get_msg_data_len (int socket_id)$/;"	f
+get_msg_data_len_non_wait	client_server.c	/^int get_msg_data_len_non_wait (int socket_id)$/;"	f
+get_msg_type_str	client_server.c	/^char * get_msg_type_str (msg_type_en msg_type) $/;"	f
+get_server_addr	test_name.c	/^void get_server_addr(FILE *fp, char *buf) {$/;"	f
+get_server_info_frm_file	client_server.c	/^int get_server_info_frm_file (char *addr, int *port_num) $/;"	f
+get_server_port_frm_file	client_server.c	/^int get_server_port_frm_file (void) $/;"	f
+grp_data	client_server.c	/^grp_data_st  *grp_data[MAX_CLIENTS];$/;"	v
+hbeat_chk_start	client_server.c	/^bool hbeat_chk_start = FALSE;$/;"	v
+is_broadcast	client_server.c	/^bool is_broadcast (void) {$/;"	f
+is_client_entry_exists	client_server.c	/^bool is_client_entry_exists(struct sockaddr_in *addr, int *index) $/;"	f
+is_debug_mode	client_server.c	/^bool is_debug_mode (void) {$/;"	f
+is_file_exist	client_server.c	/^bool is_file_exist(char *file) $/;"	f
+is_multicast	client_server.c	/^bool is_multicast (void) {$/;"	f
+is_prime	client_server.c	/^inline bool is_prime (int num)$/;"	f
+job_sent_ts	client_server.c	/^time_t job_sent_ts = 0;$/;"	v
+log_fp	client_server.c	/^FILE *log_fp = NULL;$/;"	v
+main	client.c	/^int main(int argc, char *argv[])$/;"	f
+main	server.c	/^int main(int argc, char *argv[])$/;"	f
+main	test_name.c	/^int main(int argc, char **argv)$/;"	f
+op_mode	client_server.c	/^int op_mode = 0;$/;"	v
+print_alert	client_server.c	/^void print_alert(const char* format, ... ) $/;"	f
+print_debug	client_server.c	/^void print_debug(const char* format, ... ) $/;"	f
+print_error	client_server.c	/^void print_error(const char* format, ... ) $/;"	f
+print_out	client_server.c	/^void print_out(const char* format, ... )$/;"	f
+readfds	client_server.c	/^struct pollfd readfds[MAX_CLIENTS];$/;"	v	typeref:struct:pollfd
+recv_thread	client_server.c	/^void * recv_thread (void *arg) $/;"	f
+send_job_to_grp	client_server.c	/^int send_job_to_grp(job_id_en job_id) {$/;"	f
+send_pkt_to_client	client_server.c	/^int send_pkt_to_client (int socket_id, msg_type_en msg_type, $/;"	f
+send_thread	client_server.c	/^void * send_thread (void *arg) $/;"	f
+server_action_on_msg	client_server.c	/^int server_action_on_msg(int socket_id, int hash_id,$/;"	f
+server_addr_copy	client_server.c	/^struct sockaddr_in server_addr_copy;$/;"	v	typeref:struct:sockaddr_in
+set_signal_handler	client_server.c	/^void set_signal_handler(void (*f)(int)) $/;"	f
+sigtostr	client_server.c	/^char * sigtostr(int signum)$/;"	f
+str	test_name.c	/^char str[55];$/;"	v
+total_fd	client_server.c	/^int total_fd;$/;"	v
+upd_client_db_info	client_server.c	/^void upd_client_db_info(int index, int new_socket_fd, $/;"	f
+verify_client_hbeat	client_server.c	/^void * verify_client_hbeat (void *arg) $/;"	f

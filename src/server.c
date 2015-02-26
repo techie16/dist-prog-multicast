@@ -48,6 +48,7 @@ int main(int argc, char *argv[])
     int broadcast = 1;
     int numbytes = 0;
 	int num_connection = 0;
+	FILE *fp = NULL;
 
 	/* initialize structs */
 	memset(&client_addr, 0, sizeof(client_addr));
@@ -60,11 +61,12 @@ int main(int argc, char *argv[])
 		client_entry[i] = NULL;
 	}
 
-	while ( (option = getopt(argc, argv, "hda:p:b:")) != -1) {
+	while ( (option = getopt(argc, argv, "hdma:p:b:")) != -1) {
 
 		switch(option) {
 			default: 
-				ERROR("%s", "Wrong arguments specified..Plz rerun with correct args");
+				ERROR("%s", "Wrong arguments specified.."
+							"Plz rerun with correct args");
 				disp_server_help_msg();
 				EXIT;
 				break;
@@ -78,7 +80,13 @@ int main(int argc, char *argv[])
 			case 'd':
 				/* enable debugging */
 				PRINT("%s", "Debugging mode is now enabled\n");
-				debug_on = TRUE;
+				op_mode |= DEBUG_ON;
+				break;
+
+			case 'm':
+				/* enable multicast mode */
+				PRINT("%s", "Multicast mode is now enabled\n");
+				op_mode |= MULTICAST_ON;
 				break;
 
 			case 'p':
@@ -86,22 +94,10 @@ int main(int argc, char *argv[])
 				port_num = atoi(optarg);
 				PRINT("Port number %d will be used for communication", port_num);
 				break;
-
-			case 'b':
-				/* fetch broadcast address */
-				PRINT("%s %s", "broadcast address to be used is:", optarg);
-				if ( (inet_pton(ADDR_FAMILY, optarg, 
-								&(broadcast_addr.sin_addr))) == 0) {
-					ERROR("broadcast address %s %s", optarg,
-						  "coudn't be converted using inet_pton");	
-					PRINT("%s", "using default 255.255.255.255 subnet address now for broadcast");
-					inet_pton(ADDR_FAMILY, "255.255.255.255", &(broadcast_addr.sin_addr));
-				}
-				break;
 		}
 	}
 
-	if ( (argc == 1) || !port_num) {
+	if ((argc == 1) || !port_num) {
 		PRINT("%s", "None args passed, using default values");
 		port_num = get_server_port_frm_file();
 		DEBUG("%s %d", "Port numbr from file is:", port_num);
@@ -112,72 +108,53 @@ int main(int argc, char *argv[])
 
 	comm_port = port_num+1;
 
+	/* Remove logging file if exists and create a new one */	
+	del_file_if_exist("logging.txt");
+	log_fp =  fopen("logging.txt", "a+");
+	if (!log_fp) {
+		fprintf(stderr, "Err...log_fp for logging.txt is NULL,"
+						" logging can't be done now\n");
+	}
+
+	/* Remove op_mode.txt file if exists and create a new one */	
+	del_file_if_exist("op_mode.txt");
+	fp = fopen("op_mode.txt", "w");
+	if (!fp) {
+		fprintf(stderr, "Err...fp for op_mode.txt is NULL,"
+						" Prog cant proceed now, exiting\n");
+		exit(0);
+	} else {
+		if (is_multicast()) {
+			fputs("TRUE", fp);
+		} else {
+			fputs("FALSE", fp);
+		}
+		fclose(fp);
+	}
+
     /* set prog behaviour on recieving below Signals */
     set_signal_handler(cleanExit);
 
-	broadcast_fd = socket(ADDR_FAMILY, SOCK_DGRAM, 0);
-	if (RC_NOTOK(broadcast_fd)) {
-		ERROR("%s errno: %s", "while creating socket.", strerror(errno));
-		exit(0);
+	if (is_multicast()) {
+		master_socket = socket(ADDR_FAMILY, SOCK_DGRAM, 0);
+	} else {
+		master_socket = socket(ADDR_FAMILY, SOCK_STREAM, 0);
 	}
-
-    /* now set remaininmg attributes of broadcast address struct */
-    broadcast_addr.sin_family = ADDR_FAMILY;
-    broadcast_addr.sin_port   = htons(port_num);
-
-    /* this call is what allows broadcast packets to be sent: */
-    if (setsockopt(broadcast_fd, SOL_SOCKET, SO_BROADCAST, 
-                  &broadcast, sizeof(broadcast)) == -1) {
-        ERROR("%s errno: %s", "error setting BROADCAST option for UDP socket", strerror(errno));
-    }
-
-    /* Server is UP, now send SERVER_UP to all connected clients */
-	msg = calloc(1, sizeof(msg_st));
-	if (!msg) {
-		ERROR("%s", "calloc failed for msg_st for SERVER_UP msg");
-	}
-
-	msg->type = SERVER_UP;
-	msg->len = 0;
-
-	numbytes = sendto(broadcast_fd, msg, sizeof(msg_st), 0,
-					 (struct sockaddr *) &broadcast_addr,
-					 sizeof(broadcast_addr));
 	
-    if (RC_NOTOK(numbytes)) {
-        ERROR("%s errno: %s", "sending BROADCAST message failed.", strerror(errno));
-		free_msg(msg);
-    } else {
-		PRINT("%s %s", "Server Up.. Broadcast msg sent to subnet:", 
-							inet_ntoa(broadcast_addr.sin_addr));
-		free_msg(msg);
-	}
-
-	master_socket = socket(ADDR_FAMILY, SOCK_STREAM, 0);
 	if (RC_NOTOK(master_socket)) {
-		ERROR("%s errno: %s", "while creating master socket.", strerror(errno));
-		exit(0);
+		ERROR("%s errno: %s", 
+			  "while creating master socket.", strerror(errno));
+		EXIT;
 	}
 
 	/* set socket to be reused */
 	setsockopt(master_socket, SOL_SOCKET, SO_REUSEADDR,
-							&reuse_sock, sizeof(reuse_sock));
+			   &reuse_sock, sizeof(reuse_sock));
 
     /* now set attributes of my address struct */
     my_addr.sin_family = ADDR_FAMILY;
 	my_addr.sin_addr.s_addr = htonl(INADDR_ANY);
     my_addr.sin_port   = htons(comm_port);
-
-	if (bind(master_socket, (struct sockaddr*)&my_addr,
-			sizeof(struct sockaddr)) == -1) {
-		ERROR("%s %s", "Bind failure for master_socket. errno.:", 
-												strerror(errno));
-	}
-
-	if (listen(master_socket, MAX_CLIENTS) == -1) {
-		ERROR("%s %s", "listen of master_sock failed. errno. :", 
-												strerror(errno));
-	}
 
 	/* set thread to be used to detached state */
 	rc = pthread_attr_init(&attr);
@@ -227,78 +204,137 @@ int main(int argc, char *argv[])
 
 	/* reset i to ZERO */
 	i = 0;
+	if (bind(master_socket, (struct sockaddr*)&my_addr,
+							sizeof(struct sockaddr)) == -1) {
+		ERROR("%s %s", "Bind failure for mcast master_socket. errno.:",
+						strerror(errno));
+	}
+
+	if (!is_multicast()) {
+		if (listen(master_socket, MAX_CLIENTS) == -1) {
+			ERROR("%s %s", "listen of master_sock failed. errno. :",
+			strerror(errno));
+		}
+	}
+
+	/* Copy master_socket to global copy */
+	srvr_master_sock = master_socket;
 
 	while(TRUE) {
 
 		addr_len = sizeof(struct sockaddr);
 		memset(&client_addr, 0, sizeof(client_addr));
+
+		if (is_multicast()) {
 	
-		child_socket = accept(master_socket,
-						 (struct sockaddr *)&client_addr,
-						 (socklen_t *)&addr_len);
-		if (RC_NOTOK(child_socket)) {
-			ERROR("%s %s", "accept failed. errno. ", 
-							strerror(errno));
-		} else {
-
-			DEBUG("%s", "Server accept is succesfull");
-
 			/* This would be a client registration request */
 			msg = calloc(1, sizeof(msg_st));
 			if (!msg) {
 				ERROR("%s: %s %d", FUNC, "msg alloc failure at line", 
-								 __LINE__);
-				continue;
+										 __LINE__);
+				break;
 			}
-            numbytes = recv(child_socket, msg, sizeof(msg_st), 0);              
-            if (RC_NOTOK(numbytes)) {                             
-            	ERROR("%s %s", "Registration recv() failed. errno.",       
-                		       strerror(errno)); 
-				free_msg(msg);
-				continue;
-            } else {
-				/* 
-				 * We need to check if its new registration req or
-				 * A client simply went down and Up and thus requesting
-				 * for re-registration 
-				 */
-				if (is_client_entry_exists(&client_addr, &index)) {
-					/* update new info for existing client entry in db */
-					upd_client_db_info(index, child_socket, 
-										client_addr.sin_port);
+
+			DEBUG("%s %d", "Server is listening on port:", 
+							htons(my_addr.sin_port));
+			numbytes = recvfrom(master_socket, msg, sizeof(msg_st), 0,
+							   (struct sockaddr *)&client_addr, 
+ 						 	   (socklen_t *)&addr_len);
+	
+			if (RC_NOTOK(numbytes)) {
+				ERROR("%s %s", "Client Registration request failed. errno. ", 
+								strerror(errno));
+			} else {
+				DEBUG("%s", "REG req recvd from client");
+				req_grp_id = msg->group_id;
+				num_connection++;
+			}
+			/* we are done, now free msg */
+			free_msg(msg);
+
+			/* send ACK to respective clients informing about MULTICAST mode */
+			rc = send_pkt_to_client(master_socket, ACK_FRM_SERVER,
+							&client_addr, 0, NULL);
+			if (RC_NOTOK(rc)) {
+				ERROR("%s", "multicast mode ACK_FRM_SERVER to client failed");
+			} else {
+				DEBUG("%s", "Multicast mode ACK_FRM_SERVER send success");
+			}
+
+			/* Update total_fd, will help in job division among clients */
+			total_fd = num_connection;
+			ALERT("%s", "If client reg is done, Press Enter to "
+						"proceed for Job execution");
+		} else {
+
+			/* tcp mode based comm */
+			child_socket = accept(master_socket,
+								  (struct sockaddr *)&client_addr,
+								  (socklen_t *)&addr_len);
+			if (RC_NOTOK(child_socket)) {
+				ERROR("%s %s", "accept failed. errno. ", strerror(errno));
+			} else {
+				DEBUG("%s", "Server accept is succesfull");
+				/* This would be a client registration request */
+				msg = calloc(1, sizeof(msg_st));
+				if (!msg) {
+					ERROR("%s: %s %d", FUNC, "msg alloc failure at line",
+											  __LINE__);
+					break;
+				}
+				
+				numbytes = recv(child_socket, msg, sizeof(msg_st), 0);
+				if (RC_NOTOK(numbytes)) {
+					ERROR("%s %s", "Registration recv() failed. errno.",
+									strerror(errno));
 					free_msg(msg);
 					continue;
 				} else {
-					i = num_connection;
-					num_connection++;
+					/* 
+					 * We need to check if its new registration req or
+					 * A client simply went down and Up and thus requesting
+					 * for re-registration 
+					 */
+					if (is_client_entry_exists(&client_addr, &index)) {
+						/* update new info for existing client entry in db */
+						upd_client_db_info(index, child_socket, 
+											client_addr.sin_port);
+						free_msg(msg);
+						continue;
+					} else {
+						i = num_connection;
+						num_connection++;
+					}
+
+					if (num_connection <= MAX_CLIENTS) {
+
+		    	        PRINT("%s %s %s", get_msg_type_str(msg->type),
+        				                   "recieved from client: ", 
+											inet_ntoa(client_addr.sin_addr)); 
+
+						/* Save the recvd details to client_db */
+						add_client_db_info(i, child_socket, 
+											msg->group_id, &client_addr);
+			
+						/* free the msg mem*/
+						free_msg(msg);
+
+						/* Also add this client_id to group_data db */
+						rc = add_hash_id_to_grp(i, client_entry[i]->group_id, 
+									  &(grp_data[client_entry[i]->group_id]));
+						if (RC_NOTOK(rc)) {
+							ERROR("%s", "malloc failure while adding"
+										" hash_id to grp");
+							continue;
+						}
+
+						ALERT("%s", "Press Enter to proceed to Job execution");
+					} else {
+						ALERT("%s", "Server has reached max "
+									"connections permitted");
+					}
 				}
 			}
-		}
-
-		if (num_connection <= MAX_CLIENTS) {
-
-            PRINT("%s %s %s", get_msg_type_str(msg->type),
-                           "recieved from client: ", 
-							inet_ntoa(client_addr.sin_addr)); 
-
-			/* Save the recvd details to client_db */
-			add_client_db_info(i, child_socket, msg->group_id, &client_addr);
-			
-			/* free the msg mem*/
-			free_msg(msg);
-
-			/* Also add this client_id to group_data db */
-			rc = add_hash_id_to_grp(i, client_entry[i]->group_id, 
-						  &(grp_data[client_entry[i]->group_id]));
-			if (RC_NOTOK(rc)) {
-				ERROR("%s", "malloc failure while adding hash_id to grp");
-						continue;
-			}
-
-			ALERT("%s", "Press Enter to proceed to Job execution");
-		} else {
-
-			ALERT("%s", "Server has reached max connections permitted");
 		}
 	}
 

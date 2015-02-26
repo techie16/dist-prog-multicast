@@ -33,8 +33,9 @@ int main(int argc, char *argv[])
 	bool use_def_addr = TRUE;
 	bool is_server_up = TRUE;
     int addr_len = 0, numbytes = 0;
-	int rc = 0;	
-	int group_id = 0;
+	int rc = 0;
+	FILE *fp = NULL;
+	char str_chr[6];
 
 	/* initialize structures */
 	memset(&msg_dummy, 0, sizeof(msg_st));
@@ -61,7 +62,7 @@ int main(int argc, char *argv[])
 			case 'd':
 				/* enable debugging */
 				fprintf(stdout, "   debugging is enabled\n");
-				debug_on = TRUE;
+				clnt_debug_on = TRUE;
 				break;
 
 			case 'p':
@@ -88,7 +89,12 @@ int main(int argc, char *argv[])
 
 			case 'g':
 				DEBUG("%s %s", "Client will request for group:", optarg);
-				group_id = atoi(optarg);
+				req_grp_id = atoi(optarg);
+				if (req_grp_id >= JOB_MAX) {
+					ERROR("Group Id : %d is not supported. reenter correct Group Id", 
+						  req_grp_id);
+					EXIT;
+				}
 				break;
 		}
 	}
@@ -98,7 +104,7 @@ int main(int argc, char *argv[])
 		EXIT;
 	}
 
-	if ( (argc == 1) || use_def_addr) {
+	if ((argc == 1) || use_def_addr) {
 		
 		PRINT("%s", "None args passed, using default values");
 		if (get_server_info_frm_file(addr_str, &port_num) == -1) {
@@ -116,121 +122,80 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	/* Find out in which mode server is operating */
+	fp = fopen("op_mode.txt", "r");
+	if (fp) {
+		if (fgets(str_chr, 6, fp)!= NULL) {
+			if (strncmp(str_chr, "TRUE", 4) == 0) {
+				is_multicast_supp = TRUE;
+			} else {
+				is_multicast_supp = FALSE;
+			}
+		}
+		DEBUG("%s %s", "Server is operating in multicast:", 
+					 is_multicast_supp?"TRUE":"FALSE");
+	} else {
+		fprintf(stderr, "Error opening op_mode.txt, exiting program");
+		exit(0);
+	}
+
 	comm_port = port_num+1;
 	server_addr.sin_family = ADDR_FAMILY; 
 	server_addr.sin_port = htons(comm_port);
 	memset(&server_addr.sin_zero, 0, 8); //zero the rest of the struct
-
-	comm_socket = socket(AF_INET, SOCK_STREAM, 0);
-	if (RC_NOTOK(comm_socket)) {
-		ERROR("%s %s", "TCP communication socket creation failed. errno:",
-															strerror(errno));
-		goto err_exit;
-	}
-
-	setsockopt(comm_socket, SOL_SOCKET, SO_REUSEADDR,
-			               &reuse, sizeof(reuse));
-
-	//check if server is up and available now
-	addr_len = sizeof(struct sockaddr);
-	if(connect(comm_socket, (struct sockaddr*)&server_addr, 
-							addr_len) == -1) {
-		DEBUG("%s %s", 
-			 "SERVER is not UP, moving client to listening state. err:",
-	         strerror(errno));
-		is_server_up = FALSE;
-	} else {
-		is_server_up = TRUE;
-	}
-
-	if (!is_server_up) {
-		broadcast_socket = socket(ADDR_FAMILY, SOCK_DGRAM, 0);
-	    if (RC_NOTOK(broadcast_socket)) {
-			ERROR("%s %s", "broadcast socket creation failed. errno:", 
-							strerror(errno));
-			goto err_exit;
-    	}
-  
-		/* 
-		 * get rid of "address already in use" error message by 
-    	 * setting the socket option to REUSE 
-		 */
-    	setsockopt(broadcast_socket, SOL_SOCKET, SO_REUSEADDR,
-        	       &reuse, sizeof(reuse));
-
-	    my_addr.sin_family = ADDR_FAMILY; // host byte order
-    	my_addr.sin_port = htons(port_num);
-	    my_addr.sin_addr.s_addr = htonl(INADDR_ANY); // automatically fill with my IP
-    	memset(&(my_addr.sin_zero), 0, 8); // zero the rest of the struct
-
-    	if (bind(broadcast_socket, (struct sockaddr *)&my_addr,
-					            sizeof(struct sockaddr)) == -1) {
-			ERROR("%s %s", "error while binding to broadcast socket. errno:",
-															strerror(errno));
-    		goto err_exit;
-    	}
-
-    	PRINT("%s %d", "listening for any broadcast msg from server on port:",
-			 														port_num);
-		msg = calloc(1, sizeof(msg_st));
-		if (!msg) {
-			ERROR("%s", "couln't alloc memory to msg");
-			goto err_exit;
-		}
-
-	    addr_len = sizeof(struct sockaddr);
-		numbytes = recvfrom(broadcast_socket, msg, MAX_BROADCAST_PKT_LEN,
-							0, (struct sockaddr *)&server_addr,
-							(socklen_t *)&addr_len);
-    	if (RC_NOTOK(numbytes)) {
-			ERROR("%s %s", "Broadcast msg recv failure. errno:", 
-												strerror(errno));
-        	goto err_exit;
-		}
-
-    	PRINT("Recieved %s and msg_len: %d from: %s",
-										get_msg_type_str(msg->type),
-										msg->len,
-										inet_ntoa(server_addr.sin_addr));
-		if (broadcast_socket) {
-			/* we are done, lets close it down */
-			close(broadcast_socket);
-			broadcast_socket = 0;
-		}
-		
-		/* Sleep for 2 seconds, so that server shall b ready for listening */
-		sleep(2);
-		
-		/* reset connecting port of server_addr */
-		server_addr.sin_port = htons(comm_port);
-		addr_len = sizeof(struct sockaddr);
-		if(connect(comm_socket, (struct sockaddr*)&server_addr, 
-											addr_len) == -1) {
-			ERROR("%s%s", 
-			 		"Unable to connect to Server, exiting..! errno.: ",
-	         		strerror(errno));
-			goto err_exit;
-		} else {
-			DEBUG("%s", "Connection to server is successfull");
-		}
-	}
-
+	
 	/* 
-	 * Now copy server address and comm_socket to global copy vars.
+	 * Copy server address to global copy vars.
 	 * These will be used to send EXIT signals to server for 
 	 * cleanup
   	 */
-	memset(&server_addr_copy, 0, sizeof(server_addr_copy));
-	memcpy(&server_addr_copy, &server_addr, sizeof(server_addr_copy));
-	comm_sock_copy = comm_socket;	
+	//inet_pton(AF_INET, &server_addr.sin_addr, 
+	//		  &server_addr_copy.sin_addr);
+	server_addr_copy.sin_addr.s_addr= inet_addr("173.39.53.172");
+	server_addr_copy.sin_family = ADDR_FAMILY;
+	server_addr_copy.sin_port   = htons(comm_port);
+	memset(&server_addr_copy.sin_zero, 0, 8);
 
+	if (is_multicast_supp) {
+		comm_socket = socket(AF_INET, SOCK_DGRAM, 0);
+		if (RC_NOTOK(comm_socket)) {
+			ERROR("%s %s", "UDP communication socket creation failed. errno:",
+															strerror(errno));
+			goto err_exit;
+		}
+
+		setsockopt(comm_socket, SOL_SOCKET, SO_REUSEADDR,
+	               &reuse, sizeof(reuse));
+		comm_sock_copy = comm_socket;	
+
+	} else {
+		comm_socket = socket(AF_INET, SOCK_STREAM, 0);
+		if (RC_NOTOK(comm_socket)) {
+			ERROR("%s %s", "comm socket creation failed. errno:",
+							strerror(errno));
+			goto err_exit;
+		}
+
+		comm_sock_copy = comm_socket;
+		addr_len = sizeof(struct sockaddr);
+		if(connect(comm_socket, (struct sockaddr*)&server_addr,
+					addr_len) == -1) {
+			DEBUG("%s %s", "SERVER is not UP, client exiting with errno.:",
+						   strerror(errno));
+		}
+	}
+	
 	/* Register signal events */
 	set_signal_handler(cleanExit_client);
 
+
+	/* Start the Client FSM */
 	client_state = CLIENT_INIT;
 	
 	while (client_state != CLIENT_EXIT) {
-		rc = action_on_client_state(comm_socket, client_state, &server_addr); 
+			
+		rc = action_on_client_state(comm_socket, 
+									client_state, &server_addr); 
 		if (RC_NOTOK(rc)) {
 			ERROR("%s %s", "action_on_client_state() failed for", 
 								get_client_state_str(client_state));

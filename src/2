@@ -42,9 +42,6 @@ bool clnt_debug_on = FALSE;
 int srvr_master_sock = 0;
 bool job_in_progress = FALSE;
 int my_client_id = 0;
-int sub_job_count = 0;
-int recvd_job_id = 0;
-bool exec_job_start = FALSE;
 
 void set_signal_handler(void (*f)(int)) 
 {
@@ -445,6 +442,9 @@ int send_job_to_grp_mcast (job_id_en job_id) {
 				start_sub_num = start_sub_num;
 				end_sub_num = start_sub_num + total_set + factor_inc - 1;
 
+				DEBUG("Sidd: ith: %d start_sub: %d, end_sub: %d", i,
+								start_sub_num, end_sub_num);	
+					
 				/* set job details */
 				job_det->job_id = job_id;
 				job_det->start_range = start_sub_num;
@@ -464,8 +464,6 @@ int send_job_to_grp_mcast (job_id_en job_id) {
 					/* Update ranges for new client*/
 					start_sub_num = end_sub_num + 1;
 					factor_inc = 0;
-					sub_job_count++;
-					exec_job_start = TRUE;
 				}
 			}
 			break;
@@ -852,47 +850,6 @@ void display_job_output(void)
 	FILE *fp = NULL;
 	int count = 0;
 	int num1 = 0;
-	char outp_file[FILE_NAME_LEN];
-
-	if (is_multicast()) {
-		
-		if (sub_job_count == 0 && exec_job_start) {
-			for (i = 0; i < total_fd; i++) {
-				snprintf(outp_file, FILE_NAME_LEN, "clnt_job_%d_%d",
-                        1, i);
-	
-				fp = fopen(outp_file, "r");
-				if (!fp) {
-					ERROR("File %s (output from client_id: %d) for reading failed. errno: %s",
-						  outp_file, i, strerror(errno));
-					continue;
-				} else {
-					ALERT("%s %d", "output recieved from client_id:", i);
-				}
-
-				while ((read_val = fscanf(fp, "%d", &num1)) != EOF) {
-					if (read_val == 1) {
-						count++;	
-					}
-				
-					printf("%d ", num1);
-
-					// display from new line once 10 numbers are printed
-					if (count == 10) {
-						printf("\n");
-						count = 0;
-					}
-				}
-				//flush any rem data in buffer
-				printf("\n");
-				fflush(stdout);
-				DEBUG("%s %d is over", "Ouput from Client:", i);
-				fclose(fp);
-			}
-			exec_job_start = FALSE;
-		}
-		return;
-	}
 
 	for(i = 0; i < MAX_CLIENTS; i++) {
 		if (client_entry[i] != NULL && client_entry[i]->is_participant) {
@@ -1338,18 +1295,7 @@ int action_on_client_state(int socket_fd,
 
 			if (msg && msg->type == JOB_REQ) {
 						
-				job_id = msg->job_data->job_id;
-				if (is_multicast_supp) {
-					arg.client_id = my_client_id;
-				} else {
-					arg.client_id = msg->hash_id;
-				}
-				arg.group_id = msg->group_id;
-				arg.job_id = msg->job_data->job_id;
-				arg.start_range = msg->job_data->start_range;
-				arg.end_range   = msg->job_data->end_range;
-				
-				recvd_job_id = job_id;
+				job_id = msg->job_data->job_id; 
 
 				PRINT("%s %d (from_num: %d to_num: %d)",
 					  "Recvd JOB_REQ. job_id:", 
@@ -1357,9 +1303,14 @@ int action_on_client_state(int socket_fd,
 					  msg->job_data->end_range);
 	
 				snprintf(outp_file, FILE_NAME_LEN, "clnt_job_%d_%d", 
-						job_id, arg.client_id);
+						job_id, msg->hash_id);
 				DEBUG("%s %s", "output file will be:", outp_file);
 	
+				arg.client_id = if(is_multicast_supp)?my_client_id:msg->hash_id;
+				arg.group_id = msg->group_id;
+				arg.job_id = msg->job_data->job_id;
+				arg.start_range = msg->job_data->start_range;
+				arg.end_range   = msg->job_data->end_range;
 				strcpy(arg.inpt_file, msg->job_data->inpt_file);
 				strcpy(arg.outpt_file, outp_file);
 		
@@ -1473,7 +1424,6 @@ int server_action_on_msg(int socket_id, int hash_id,
 		
 		case JOB_RESP:
 			if (is_multicast()) {
-				sub_job_count--;
 				break;
 			}
 			client_entry[hash_id]->is_exec = FALSE;
@@ -1601,29 +1551,25 @@ void * verify_client_hbeat (void *arg)
 	while (TRUE) {
 
 		if (is_multicast()) {
-			if (sub_job_count == 0 && exec_job_start) {
-				//All jobs are completed, display output
-				PRINT("%s", "JOB RESPONSE recvd from all clients");
-				display_job_output();
-				disp_cons_job = TRUE;
-			}
-
-			//check if timeout happend, display all recvd Job output
-			sleep(1);
-			curr_time = time(NULL);
-			if ((job_sent_ts != 0) && (curr_time - job_sent_ts) > JOB_FIN_TIME) {
-
-				if (exec_job_start) {
-					/* signal end of JOB */
-					PRINT("%s", "Wait for JOB RESP timer expired.. Displaying recvd results");
-					display_job_output();
-					disp_cons_job = TRUE;	
-					exec_job_start = FALSE;
-				}
-			}
-			continue;
+			if (job_pend_counter == 0 && job_exec_start) {
+			//All jobs are completed, display output
+			PRINT("%s", "JOB RESPONSE recvd from all clients");
+			display_job_output();
+			disp_cons_job = TRUE;
 		}
 
+		//check if timeout happend, display all recvd Job output
+		sleep(1);
+		curr_time = time(NULL);
+		if ((job_sent_ts != 0) && (curr_time - job_sent_ts) > JOB_FIN_TIME) {
+			/* signal end of JOB */
+			PRINT("%s", "Wait for JOB RESP timer expired.. Displaying recvd results");
+			display_job_output();
+			disp_cons_job = TRUE;	
+		}
+
+			continue;
+		}
 		//reset job_pend_counter 
 		job_pend_counter = 0;
 		job_exec_start   = 0;
@@ -1876,10 +1822,10 @@ void * exec_job_thread (void *arg)
 		msg->job_data->job_id = thread_arg->job_id;
 		strcpy(msg->job_data->outpt_file, thread_arg->outpt_file);
 
-		if (is_multicast_supp) {
+		if (is_multicast()) {
 			numbytes = sendto(comm_sock_copy, msg, 
 							  sizeof(msg_st)+sizeof(job_st), 0,
-							  (struct sockaddr *)&server_addr_copy,
+							  (struct sockaddr *) &server_addr_copy,
 							  sizeof(struct sockaddr_in));	
 		} else { 
 			numbytes = send(comm_sock_copy, msg, 

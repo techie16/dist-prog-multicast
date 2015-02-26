@@ -1,0 +1,69 @@
+***DEBUG: Server is listening on port: 3691
+***DEBUG: verify_client_hbeat: called
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: send_thread: entered, waiting for ENTER key event
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: REG req recvd from client
+***DEBUG: ACK from server sent succesfully
+***DEBUG: Multicast mode ACK_FRM_SERVER send success
+***DEBUG: Server is listening on port: 3691
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: User pressed Enter, continue to send_thread
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: Sidd: ith: 0 start_sub: 1, end_sub: 64000
+***DEBUG: Job sub part send to mcast_grp: 1 success
+***DEBUG: JOB_RESP: recvd from client
+***DEBUG: Sidd: JOB_RESP recvd. val of sub_job_count: 1
+***DEBUG: Sidd: val of sub_job_count: 0
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 1
+***DEBUG: Ouput from Client: 0 is over
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
+***DEBUG: Sidd: sub_job_count: 0 exec_job_start: 0
